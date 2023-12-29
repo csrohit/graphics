@@ -12,17 +12,27 @@
  *  opensource.org/licenses/BSD-3-Clause
  */
 
-#include <X11/XKBlib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
+/*--- System headers ---*/
+#include <vector>
+#define _USE_MATH_DEFINES
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#define _USE_MATH_DEFINES
 #include <math.h>
 
+/*--- Xlib headers ---*/
+#include <X11/XKBlib.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
+/*--- Vulkan headers ---*/
+#include "myheader.h"
+/*--- Defines ---*/
+#define WIN_WIDTH  800
+#define WIN_HEIGHT 600
+
 /* function declaration */
-static void initialize();
+static int  initialize();
 static void uninitialize();
 static void display();
 static void update();
@@ -36,7 +46,7 @@ bool        gbAbortFlag  = false;   // Global abort flag
 XRectangle  rect         = {0};     // window dimentions rectangle
 bool        gbFullscreen = false;   // should display in fullscreen mode
 bool        shouldDraw   = false;   // should scene be rendered
-Colormap   colormap;
+Colormap    colormap;
 XVisualInfo visualInfo;
 
 /*--- Entry point --*/
@@ -71,13 +81,32 @@ int main(int argc, char *argv[])
     xattr.event_mask        = ExposureMask | KeyPressMask | StructureNotifyMask;
     colormap                = xattr.colormap;
 
-    w = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, visualInfo.depth, InputOutput, visualInfo.visual, CWColormap | CWEventMask, &xattr);
+    w = XCreateWindow(dpy,                      // pointer to display
+                      root,                     // handle to root window
+                      0,                        // left
+                      0,                        // top
+                      WIN_WIDTH,                // width of windows
+                      WIN_HEIGHT,               // height of window
+                      0,                        // border width
+                      visualInfo.depth,         // depth fo window
+                      InputOutput,              // window class
+                      visualInfo.visual,        // visual info
+                      CWColormap | CWEventMask, // style mask
+                      &xattr                    // pointer to attributes
+    );
+
     /* register for window close event */
     wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, w, &wm_delete_window, 1);
 
     XStoreName(dpy, w, "Rohit Nimkar: Vulkan");
     XMapWindow(dpy, w);
+
+
+    int screenWidth  = XWidthOfScreen(XScreenOfDisplay(dpy, visualInfo.screen));
+    int screenHeight = XHeightOfScreen(ScreenOfDisplay(dpy, visualInfo.screen));
+    XMoveWindow(dpy, w, (screenWidth - WIN_WIDTH) / 2, (screenHeight - WIN_HEIGHT) / 2);
+    XFlush(dpy);
 
     initialize();
 
@@ -125,7 +154,6 @@ int main(int argc, char *argv[])
                         case XK_f:
                         {
                             toggleFullscreen(dpy, w);
-                            gbFullscreen = !gbFullscreen;
                             break;
                         }
 
@@ -168,17 +196,22 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-static void initialize()
+static int initialize()
 {
-    XWindowAttributes xattr;
+    XWindowAttributes xattr = {};
     XGetWindowAttributes(dpy, w, &xattr);
+
+    initVulkan();
+
     // Set the clipping plane equation
     resize(xattr.width, xattr.height);
-    toggleFullscreen(dpy, w);
+    // toggleFullscreen(dpy, w);
+    return (0);
 }
 
 void uninitialize()
 {
+    cleanUp();
 }
 
 float angle = 0.0f;
@@ -212,9 +245,10 @@ static void toggleFullscreen(Display *display, Window window)
     evt.xclient.message_type = wm_state;
     evt.xclient.format       = 32;
     evt.xclient.window       = window;
-    evt.xclient.data.l[0]    = 2; // _NET_WM_STATE_TOGGLE
+    evt.xclient.data.l[0]    = gbFullscreen ? 0 : 1; // _NET_WM_STATE_TOGGLE
     evt.xclient.data.l[1]    = fullscreen;
     evt.xclient.data.l[2]    = 0;
 
     XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &evt);
+    gbFullscreen = !gbFullscreen;
 }

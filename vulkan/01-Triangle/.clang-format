@@ -10,7 +10,7 @@ AlignConsecutiveMacros: 'true'
 AlignConsecutiveAssignments: 'true'
 AlignConsecutiveDeclarations: 'true'
 AlignEscapedNewlines: Left
-ColumnLimit: '200'
+ColumnLimit: '150'
 IndentCaseLabels: true
 AllowShortFunctionsOnASingleLine: None
 ...
