@@ -2,6 +2,7 @@
 
 #include <X11/Xlib.h>
 #include <optional>
+#include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h>
 
@@ -18,7 +19,11 @@ struct QueueFamilyIndices
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
-
+struct SwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+};
 int initVulkan();
 
 void cleanUp();

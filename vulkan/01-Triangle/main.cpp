@@ -102,7 +102,6 @@ int main(int argc, char *argv[])
     XStoreName(dpy, w, "Rohit Nimkar: Vulkan");
     XMapWindow(dpy, w);
 
-
     int screenWidth  = XWidthOfScreen(XScreenOfDisplay(dpy, visualInfo.screen));
     int screenHeight = XHeightOfScreen(ScreenOfDisplay(dpy, visualInfo.screen));
     XMoveWindow(dpy, w, (screenWidth - WIN_WIDTH) / 2, (screenHeight - WIN_HEIGHT) / 2);
@@ -131,7 +130,6 @@ int main(int argc, char *argv[])
                     {
                         gbAbortFlag = true;
                     }
-
                     break;
                 }
                 case KeyPress:
@@ -213,12 +211,6 @@ void uninitialize()
 {
     cleanUp();
 }
-
-float angle = 0.0f;
-
-double planeEquation[]  = {0.0, 0.01, 0.0, 0.0}; // This example sets a clipping plane along the x=0 plane
-double planeEquation1[] = {0.0, 0.00, 0.0, 0.0}; // This example sets a clipping plane along the x=0 plane
-void   drawScene();
 
 static void display()
 {
