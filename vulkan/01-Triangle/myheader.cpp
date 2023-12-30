@@ -28,6 +28,7 @@ const std::vector<const char *> requiredExtensions     = {VK_KHR_SURFACE_EXTENSI
 /*--- Vulkan related global variables ---*/
 VkInstance                      instance         = {};
 const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 VkPhysicalDevice                physicalDevice   = VK_NULL_HANDLE;
 VkDebugUtilsMessengerEXT        debugMessenger;
 VkDevice                        device;
@@ -219,6 +220,24 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+{
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+    std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+    for (const auto &extension : availableExtensions)
+    {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
+}
+
 bool isDeviceSuitable(VkPhysicalDevice device)
 {
     // VkPhysicalDeviceProperties deviceProperties;
@@ -228,8 +247,10 @@ bool isDeviceSuitable(VkPhysicalDevice device)
     //
     // return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;
 
-    QueueFamilyIndices indices = findQueueFamilies(device);
-    return indices.isComplete();
+    QueueFamilyIndices indices              = findQueueFamilies(device);
+    bool               isExtensionSupported = checkDeviceExtensionSupport(device);
+
+    return indices.isComplete() && isExtensionSupported;
 }
 
 static void pickPhysicalDevice()
@@ -319,11 +340,12 @@ void createLogicalDevice()
     VkPhysicalDeviceFeatures deviceFeatures = {};
     VkDeviceCreateInfo       createInfo     = {};
 
-    createInfo.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pQueueCreateInfos     = queueCreateInfos.data();
-    createInfo.queueCreateInfoCount  = static_cast<uint32_t>(queueCreateInfos.size());
-    createInfo.pEnabledFeatures      = &deviceFeatures;
-    createInfo.enabledExtensionCount = 0;
+    createInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pQueueCreateInfos       = queueCreateInfos.data();
+    createInfo.queueCreateInfoCount    = static_cast<uint32_t>(queueCreateInfos.size());
+    createInfo.pEnabledFeatures        = &deviceFeatures;
+    createInfo.enabledExtensionCount   = static_cast<uint32_t>(deviceExtensions.size());
+    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
     if (enableValidationLayers)
     {
