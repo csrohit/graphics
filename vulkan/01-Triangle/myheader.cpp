@@ -10,9 +10,11 @@ static bool                      checkValidationLayerSupport();
 static std::vector<const char *> getRequiredExtensions();
 VkResult                         CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
                                                               const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger);
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator);
-void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo);
-
+void        DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator);
+void        populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo);
+static void pickPhysicalDevice();
+static void setupDebugMessenger();
+static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
@@ -23,8 +25,8 @@ const std::vector<const char *> requiredExtensions     = {VK_KHR_SURFACE_EXTENSI
 /*--- Vulkan related global variables ---*/
 VkInstance                      instance         = {};
 const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-
-VkDebugUtilsMessengerEXT debugMessenger;
+VkPhysicalDevice                physicalDevice   = VK_NULL_HANDLE;
+VkDebugUtilsMessengerEXT        debugMessenger;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
                                                     VkDebugUtilsMessageTypeFlagsEXT             messageType,
@@ -42,6 +44,8 @@ int initVulkan()
         std::cerr << "failed to create istance\n";
         return (-1);
     }
+    setupDebugMessenger();
+    pickPhysicalDevice();
 
     return (0);
 }
@@ -180,6 +184,77 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+bool isDeviceSuitable(VkPhysicalDevice device)
+{
+    // VkPhysicalDeviceProperties deviceProperties;
+    // VkPhysicalDeviceFeatures   deviceFeatures;
+    // vkGetPhysicalDeviceProperties(device, &deviceProperties);
+    // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+    //
+    // return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;
+
+    QueueFamilyIndices indices = findQueueFamilies(device);
+    return indices.graphicsFamily.has_value();
+}
+
+static void pickPhysicalDevice()
+{
+    uint32_t deviceCount = 0U;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+    if (0 == deviceCount)
+    {
+        std::cerr << "failed to get list of physical devices\n";
+    }
+
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+    for (const auto &device : devices)
+    {
+        if (isDeviceSuitable(device))
+        {
+            physicalDevice = device;
+            break;
+        }
+    }
+
+    if (physicalDevice == VK_NULL_HANDLE)
+    {
+        throw std::runtime_error("failed to find a suitable GPU!");
+    }
+}
+
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+{
+    QueueFamilyIndices indices;
+
+    uint32_t qFamilyCount = 0U;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(qFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, queueFamilies.data());
+
+    int i = 0;
+    for (const auto &queueFamily : queueFamilies)
+    {
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            indices.graphicsFamily = i;
+        }
+
+        if (indices.graphicsFamily.has_value())
+        {
+            break;
+        }
+
+        i++;
+    }
+
+    return indices;
+}
+
+/*--- temp ---*/
 static void getSupportedExtensions()
 {
 
