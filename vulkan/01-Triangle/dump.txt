@@ -30,7 +30,7 @@ Instance Extensions: count = 20
 
 Layers: count = 4
 =================
-VK_LAYER_INTEL_nullhw (INTEL NULL HW) Vulkan version 1.1.73, layer version 1:
+VK_LAYER_INTEL_nullhw cd ..(INTEL NULL HW) Vulkan version 1.1.73, layer version 1:
 	Layer Extensions: count = 0
 	Devices: count = 3
 		GPU id = 0 (Intel(R) Graphics (RPL-P))
