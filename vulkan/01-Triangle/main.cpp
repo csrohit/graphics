@@ -214,6 +214,7 @@ void uninitialize()
 
 static void display()
 {
+    drawFrame();
 }
 
 static void update()

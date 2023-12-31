@@ -25,5 +25,6 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes;
 };
 int initVulkan();
+void drawFrame();
 
 void cleanUp();
