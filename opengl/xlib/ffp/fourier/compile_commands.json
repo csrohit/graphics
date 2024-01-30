@@ -1,0 +1,72 @@
+[
+ {
+  "directory": "/home/csrohit/code/opengl/xlib/ffp/mandlebrot",
+  "arguments": [
+   "g++",
+   "-DXK_MISCELLANY",
+   "-Iinclude",
+   "-g3",
+   "-o",
+   "build/src/mandlebrot.o",
+   "-c",
+   "src/mandlebrot.cpp"
+  ],
+  "file": "src/mandlebrot.cpp"
+ },
+ {
+  "directory": "/home/csrohit/code/opengl/xlib/ffp/mandlebrot",
+  "arguments": [
+   "g++",
+   "-DXK_MISCELLANY",
+   "-Iinclude",
+   "-g3",
+   "-o",
+   "build/src/main.o",
+   "-c",
+   "src/main.cpp"
+  ],
+  "file": "src/main.cpp"
+ },
+ {
+  "directory": "/home/csrohit/code/opengl/xlib/ffp/fourier",
+  "arguments": [
+   "g++",
+   "-DXK_MISCELLANY",
+   "-Iinclude",
+   "-g3",
+   "-o",
+   "build/src/fourier.o",
+   "-c",
+   "src/fourier.cpp"
+  ],
+  "file": "src/fourier.cpp"
+ },
+ {
+  "directory": "/home/csrohit/code/opengl/xlib/ffp/fourier",
+  "arguments": [
+   "g++",
+   "-DXK_MISCELLANY",
+   "-Iinclude",
+   "-g3",
+   "-o",
+   "build/src/main.o",
+   "-c",
+   "src/main.cpp"
+  ],
+  "file": "src/main.cpp"
+ },
+ {
+  "directory": "/home/csrohit/code/opengl/xlib/ffp/fourier",
+  "arguments": [
+   "g++",
+   "-DXK_MISCELLANY",
+   "-Iinclude",
+   "-g3",
+   "-o",
+   "build/src/queue.o",
+   "-c",
+   "src/queue.cpp"
+  ],
+  "file": "src/queue.cpp"
+ }
+]
