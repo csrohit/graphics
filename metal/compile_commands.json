@@ -1,0 +1,30 @@
+[
+ {
+  "directory": "/Users/csrohit/code/cocoa/metal",
+  "arguments": [
+   "clang++",
+   "-o",
+   "main.o",
+   "-c",
+   "main.cpp",
+   "-Imetal-cpp",
+   "-DNS_PRIVATE_IMPLEMENTATION",
+   "-g3"
+  ],
+  "file": "main.cpp"
+ },
+ {
+  "directory": "/Users/csrohit/code/cocoa/metal",
+  "arguments": [
+   "clang++",
+   "-o",
+   "test.o",
+   "-c",
+   "test.cpp",
+   "-Imetal-cpp",
+   "-DNS_PRIVATE_IMPLEMENTATION",
+   "-g3"
+  ],
+  "file": "test.cpp"
+ }
+]
