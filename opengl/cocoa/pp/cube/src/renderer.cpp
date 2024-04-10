@@ -9,6 +9,10 @@ using namespace vmath;
 #define INCREMENT_ANGLE 0.1f;
 
 
+GLint        compileShader(unsigned int shaderId, const char *shaderSourceCode);
+GLint        linkProgram(GLuint programId);
+unsigned int loadShaders(const char *vertexShaderSourceCode, const char *fragmentShaderSourceCode);
+
 
 const GLchar *vertexShaderSource = "#version 410 core"
                                    "\n"
@@ -72,101 +76,38 @@ mat4 projectionMatrix = {0};
 
 /* Functional variables */
 GLfloat rotationAngle = 0.0f;
+vmath::vec3 eyePosition = vmath::vec3(0.0f, 0.0f, 2.0f);
+vmath::vec3 eyeTarget   = vmath::vec3(0.0f, 0.0f, 0.0f);
 
 int initialize()
 {
-    GLint   infoLogLength        = 0;
-    GLint   shaderCompiledStatus = 0;
-    GLchar *szInfoLog            = NULL;
 
-    GLuint vertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShaderObject, 1, (const GLchar **)&vertexShaderSource, NULL);
-
-    glCompileShader(vertexShaderObject);
-    glGetShaderiv(vertexShaderObject, GL_COMPILE_STATUS, &shaderCompiledStatus);
-    if (shaderCompiledStatus == GL_FALSE)
+    shaderProgramObject = loadShaders(vertexShaderSource, fragmentShaderSource);
+    if (0U == shaderProgramObject)
     {
-        glGetShaderiv(vertexShaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
-        if (infoLogLength > 0)
-        {
-            szInfoLog = (GLchar *)malloc(sizeof(GLchar) * infoLogLength);
-            if (szInfoLog != NULL)
-            {
-                GLsizei written;
-                glGetShaderInfoLog(vertexShaderObject, infoLogLength, &written, szInfoLog);
-                fprintf(gpFile, "-> vertex shader compilation log : %s\n", szInfoLog);
-                fprintf(gpFile, "-------------------------------------------------------------\n");
-                free(szInfoLog);
-            }
-        }
+        fprintf(gpFile, "Failed to load shaders \n");
+        return -1;
     }
-    fprintf(gpFile, "-> vertex shader compiled successfully\n");
-    fprintf(gpFile, "-------------------------------------------------------------\n");
 
-    GLuint fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShaderObject, 1, (const GLchar **)&fragmentShaderSource, NULL);
-
-    // compile shader
-    glCompileShader(fragmentShaderObject);
-
-    // shader compilation error checking
-    glGetShaderiv(fragmentShaderObject, GL_COMPILE_STATUS, &shaderCompiledStatus);
-    if (shaderCompiledStatus == GL_FALSE)
-    {
-        glGetShaderiv(fragmentShaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
-        if (infoLogLength > 0)
-        {
-            szInfoLog = (GLchar *)malloc(sizeof(GLchar) * infoLogLength);
-            if (szInfoLog != NULL)
-            {
-                GLsizei written;
-                glGetShaderInfoLog(fragmentShaderObject, infoLogLength, &written, szInfoLog);
-                fprintf(gpFile, "-> fragment shader compilation log : %s\n", szInfoLog);
-                fprintf(gpFile, "-------------------------------------------------------------\n");
-                free(szInfoLog);
-            }
-        }
-    }
-    fprintf(gpFile, "-> fragment shader compiled successfully\n");
-    fprintf(gpFile, "-------------------------------------------------------------\n");
-
-    // shader program
-    shaderProgramObject = glCreateProgram();
-
-    // attach shaders to program object
-    glAttachShader(shaderProgramObject, vertexShaderObject);
-    glAttachShader(shaderProgramObject, fragmentShaderObject);
-
-    // bind shader program object with vertex shader attributes
     glBindAttribLocation(shaderProgramObject, 0, "aPosition");
     glBindAttribLocation(shaderProgramObject, 1, "aColor");
 
-    // link program
-    glLinkProgram(shaderProgramObject);
-
-    // shader linking error chechking
-    GLint shaderProgramLinkStatus = 0;
-    glGetProgramiv(shaderProgramObject, GL_LINK_STATUS, &shaderProgramLinkStatus);
-    if (shaderProgramLinkStatus == GL_FALSE)
+    if (GL_FALSE == linkProgram(shaderProgramObject))
     {
-        glGetProgramiv(shaderProgramObject, GL_INFO_LOG_LENGTH, &infoLogLength);
-        if (infoLogLength > 0)
-        {
-            szInfoLog = (GLchar *)malloc(sizeof(GLchar) * infoLogLength);
-            if (szInfoLog != NULL)
-            {
-                GLsizei written;
-                glGetProgramInfoLog(shaderProgramObject, infoLogLength, &written, szInfoLog);
-                fprintf(gpFile, "-> shader program link log : %s\n", szInfoLog);
-                free(szInfoLog);
-            }
-        }
+        fprintf(gpFile, "Failed to link shaders\n");
+        glDeleteProgram(shaderProgramObject);
+        return -1;
     }
-    fprintf(gpFile, "-> shader program linked successfully\n");
+
+    fprintf(gpFile, "Shader program linked successfully\n");
 
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
     modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "uModelMatrix");
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
+
+    fprintf(gpFile, "MVP Matrix %u\n", projectionMatrixUniform);
+    fprintf(gpFile, "MVP Matrix %u\n", modelMatrixUniform);
+    fprintf(gpFile, "MVP Matrix %u\n", viewMatrixUniform);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -293,4 +234,106 @@ void uninitialize()
         shaderProgramObject = 0;
         glUseProgram(0);
     }
+}
+
+
+unsigned int loadShaders(const char *vertexShaderSourceCode, const char *fragmentShaderSourceCode)
+{
+    GLuint programId = 0U;
+
+    GLuint vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
+
+    if (GL_TRUE == compileShader(vertexShaderId, vertexShaderSourceCode))
+    {
+        GLuint fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
+        if (GL_TRUE == compileShader(fragmentShaderId, fragmentShaderSourceCode))
+        {
+            programId = glCreateProgram();
+            glAttachShader(programId, vertexShaderId);
+            glAttachShader(programId, fragmentShaderId);
+        }
+        else
+        {
+            glDeleteShader(vertexShaderId);
+            glDeleteShader(fragmentShaderId);
+        }
+    }
+    else
+    {
+        glDeleteShader(vertexShaderId);
+    }
+    return programId;
+}
+
+GLint compileShader(unsigned int shaderId, const char *shaderSourceCode)
+{
+    GLint status = 0;
+
+    glShaderSource(shaderId, 1, (const GLchar **)&shaderSourceCode, nullptr);
+    glCompileShader(shaderId);
+    glGetShaderiv(shaderId, GL_COMPILE_STATUS, &status);
+    if (GL_FALSE == status)
+    {
+        GLint infoLogLength = 0;
+        glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &infoLogLength);
+        if (0 != infoLogLength)
+        {
+            GLchar *szInfoLog = (GLchar *)malloc(sizeof(GLchar) * (infoLogLength + 1));
+            if (nullptr != szInfoLog)
+            {
+                glGetShaderInfoLog(shaderId, infoLogLength, nullptr, szInfoLog);
+                fprintf(gpFile, "Vertex Shader compilation error log: %s\n", szInfoLog);
+                free(szInfoLog);
+                szInfoLog = nullptr;
+            }
+        }
+    }
+    return status;
+}
+
+GLint linkProgram(GLuint programId)
+{
+    GLint status   = GL_FALSE;
+    GLint nShaders = 0;
+
+    glLinkProgram(programId);
+
+    glUseProgram(programId);
+    glGetProgramiv(programId, GL_ATTACHED_SHADERS, &nShaders);
+    if (0 < nShaders)
+    {
+        GLuint *pShaders = new GLuint[nShaders]();
+        if (nullptr != pShaders)
+        {
+            glGetAttachedShaders(programId, nShaders, nullptr, pShaders);
+            for (GLint idx = 0U; idx <= nShaders; ++idx)
+            {
+                glDetachShader(programId, pShaders[idx]);
+                glDeleteShader(pShaders[idx]);
+                pShaders[idx] = 0U;
+            }
+            delete[] pShaders;
+            pShaders = nullptr;
+        }
+    }
+    glUseProgram(0U);
+
+    glGetProgramiv(programId, GL_LINK_STATUS, &status);
+    if (GL_FALSE == status)
+    {
+        int infoLogLength = 0;
+        glGetProgramiv(programId, GL_INFO_LOG_LENGTH, &infoLogLength);
+        if (0 != infoLogLength)
+        {
+            GLchar *szInfoLog = (GLchar *)malloc(sizeof(GLchar) * (infoLogLength + 1));
+            if (nullptr != szInfoLog)
+            {
+                glGetProgramInfoLog(programId, infoLogLength, nullptr, szInfoLog);
+                fprintf(gpFile, "Program linking error log: %s\n", szInfoLog);
+                free(szInfoLog);
+                szInfoLog = nullptr;
+            }
+        }
+    }
+    return status;
 }

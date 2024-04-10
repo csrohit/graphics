@@ -11,4 +11,5 @@ void update();
 void resize(int width, int height);
 void uninitialize();
 void onKeyDown(int key);
+
 #endif // !RENDERER_H
