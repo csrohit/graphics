@@ -117,7 +117,10 @@ extern FILE *gpFile;
     fprintf(gpFile, "Version : %s\n", glGetString(GL_VERSION));
     fprintf(gpFile, "GLSL Version : %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-    initialize();
+    if (0U != initialize())
+    {
+        [[self window] close];
+    }
 
     [self reshape];
     [[self window] toggleFullScreen:self];
