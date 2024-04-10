@@ -4,9 +4,9 @@
 #include <cstdlib>
 #include <cstring>
 
-GLint        compileShader(unsigned int shaderId, const char *shaderSourceCode);
-GLint        linkProgram(GLuint programId);
-unsigned int loadShaders(const char *vertexShaderSourceCode, const char *fragmentShaderSourceCode);
+GLint  compileShader(unsigned int shaderId, const char *shaderSourceCode);
+GLint  linkProgram(GLuint programId);
+GLuint loadShaders(const char *vertexShaderSourceCode, const char *fragmentShaderSourceCode);
 
 const GLchar *vertexShaderSource = "#version 410 core"
                                    "\n"
@@ -160,7 +160,7 @@ void uninitialize()
     }
 }
 
-unsigned int loadShaders(const char *vertexShaderSourceCode, const char *fragmentShaderSourceCode)
+GLuint loadShaders(const char *vertexShaderSourceCode, const char *fragmentShaderSourceCode)
 {
     GLuint programId = 0U;
 
