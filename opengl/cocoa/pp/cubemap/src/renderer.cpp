@@ -201,7 +201,7 @@ GLuint textureSkybox    = 0U;
 
 /* Functional variables */
 GLfloat     rotationAngle = 0.0f;
-const char *arr[]         = {"right.jpg", "left.jpg", "top.jpg", "bottom.jpg", "front.jpg", "back.jpg"};
+const char *arr[]         = {"./textures/right.jpg", "./textures/left.jpg", "./textures/top.jpg", "./textures/bottom.jpg", "./textures/front.jpg", "./textures/back.jpg"};
 
 vmath::vec3 eyePosition = vmath::vec3(0.0f, 0.0f, 2.0f);
 vmath::vec3 eyeTarget   = vmath::vec3(0.0f, 0.0f, 0.0f);
@@ -218,8 +218,8 @@ int initialize()
     skyboxShaderProgramId = loadShaders(skyoxVertexShaderSourceCode, skyboxFragmentShaderSourceCode);
     glBindAttribLocation(skyboxShaderProgramId, AMC_ATTRIBUTE_POSITION, "aPosition");
     linkProgram(skyboxShaderProgramId);
-    skyboxMVPMatrixUniform = glGetUniformLocation(shaderProgramObject, "uMVPMatrix");
-    skyboxSamplerUniform   = glGetUniformLocation(shaderProgramObject, "skybox");
+    skyboxMVPMatrixUniform = glGetUniformLocation(skyboxShaderProgramId, "uMVPMatrix");
+    skyboxSamplerUniform   = glGetUniformLocation(skyboxShaderProgramId, "skybox");
 
     /* Sqaure */
     glGenVertexArrays(1, &vaoModel);
