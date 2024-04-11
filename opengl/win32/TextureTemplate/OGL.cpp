@@ -100,36 +100,41 @@ void resize(int width, int height);
  */
 GLint compileShader(unsigned int shaderId, const char* shaderSource);
 
-void  loadGLTexture(GLuint* texture, const char* filename);
+/**
+ * @brief Link program
+ *
+ * @param programId [in] - program identifier
+ *
+ * @returns 0 on success else negative value
+ */
 GLint linkProgram(GLuint programId);
 
-GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShaderSourceCode);
+/**
+ * @brief Load shaders into memory
+ *
+ * @param vertexSource   [in] - Vertex Shader source code
+ * @param fragmentSource [in] - Fragment shader source code
+ *
+ * @returns program id
+ */
+GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
+
+/**
+ * @brief Load texture into memory
+ *
+ * @param texture  [out] - pointer to texture id
+ * @param filename [in]  - file name
+ *
+ * @returns texture id
+ */
+void  loadGLTexture(GLuint* texture, const char* filename);
 
 /* Global variable declaration */
 GLuint shaderProgramObject;
 
-const GLfloat vertices[] = {
-    -1.0f, 1.0f,  0.0f, // top-left
-    -1.0f, -1.0f, 0.0f, // bottom-left
-    1.0f,  -1.0f, 0.0f, // bottom-right
-    1.0f,  1.0f,  0.0f, // top-right
-};
-
-const GLfloat texCoords[] = {
-    0.0f, 1.0f, // top-left
-    0.0f, 0.0f, // bottom-left
-    1.0f, 0.0f, // bottom-right
-    1.0f, 1.0f  // top-right
-};
-
 GLuint modelMatrixUniform;
 GLuint viewMatrixUniform;
 GLuint projectionMatrixUniform;
-
-GLuint pass_mvpMatrixUniform;
-
-GLuint fbo_depth;
-GLuint depth_texture;
 
 GLuint vao;
 GLuint vboPosition;
@@ -499,6 +504,21 @@ int initialize(void)
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "u_viewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "u_projectionMatrix");
     diffuseTextureUniform   = glGetUniformLocation(shaderProgramObject, "diffuse_texture");
+	
+	/* Shader data */
+	const GLfloat vertices[] = {
+		-1.0f, 1.0f,  0.0f, // top-left
+		-1.0f, -1.0f, 0.0f, // bottom-left
+		1.0f,  -1.0f, 0.0f, // bottom-right
+		1.0f,  1.0f,  0.0f, // top-right
+	};
+
+	const GLfloat texCoords[] = {
+		0.0f, 1.0f, // top-left
+		0.0f, 0.0f, // bottom-left
+		1.0f, 0.0f, // bottom-right
+		1.0f, 1.0f  // top-right
+	};
 
     // setup vao and vbo
     glGenVertexArrays(1, &vao);
