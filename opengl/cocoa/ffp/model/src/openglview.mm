@@ -131,7 +131,7 @@ extern FILE *gpFile;
 {
     /*---- Load models --*/
     // initializeCar();
-    loadModel("planet.obj", &pModel);
+    loadModel("blender-sphere.obj", &pModel);
     [super prepareOpenGL];
 
     /* setup display link */
@@ -347,7 +347,7 @@ extern FILE *gpFile;
 
 void drawModel(struct Model *pModel)
 {
-    glBegin(GL_TRIANGLES);
+    glBegin(GL_POINTS);
     struct Group *pGroup = pModel->pGroups;
     while (NULL != pGroup)
     {
