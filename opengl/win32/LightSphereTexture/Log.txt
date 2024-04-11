@@ -1,0 +1,9 @@
+Program for Black Screen started successfully!!!!
+OpenGL Information
+OpenGL Vendor     : Intel
+OpenGL Renderer   : Intel(R) Iris(R) Xe Graphics
+OpenGL Version    : 4.6.0 - Build 31.0.101.4314
+GLSL Version      : 4.60 - Build 31.0.101.4314
+-> shader program linked successfully
+
+----- Program Completed Successfully -----
