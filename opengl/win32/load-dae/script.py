@@ -151,15 +151,16 @@ def geometryToModel(geometry: dict)->dict:
                 model['nTriangles'] = count  # Write the count of floats as an integer
                 model['triangles'] = [data[triangleIdx*3*stride + vertexIdx*stride:triangleIdx*3*stride + vertexIdx*stride + stride:] for triangleIdx in range(count) for vertexIdx in range(3)]
     
-    mapIndices = [[-1 for iNormal in range(model['nNormals'])] for iPosition in range(model['nPositions'])]
+    mapIndices = [[[-1 for iTexel in range(model['nTexels'])] for iNormal in range(model['nNormals'])] for iPosition in range(model['nPositions'])]
     outIndices = []
     outVertices = []
     for idxPosition, idxNormal, idxTexel in model['triangles']:
-        if mapIndices[idxPosition][idxNormal] == -1:
+        if mapIndices[idxPosition][idxNormal][idxTexel] == -1:
             # create new index
             newVertex = []
             newVertex.extend(model['positions'][idxPosition])
             newVertex.extend(model['normals'][idxNormal])
+            newVertex.extend(model['texels'][idxTexel])
             # newVertex.extend(model['texels'][idxTexel])
             outVertices.append(newVertex)
             mapIndices[idxPosition][idxNormal] = len(outVertices) - 1
@@ -174,7 +175,7 @@ def geometryToModel(geometry: dict)->dict:
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "cube.dae"
+    file_path = "sphere.dae"
     geometry = read_xml(file_path)
     model = geometryToModel(geometry)
     writeFile(model)

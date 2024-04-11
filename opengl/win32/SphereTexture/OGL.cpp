@@ -17,6 +17,7 @@
 #include <Windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
 /* OpenGL header files */
 #include <gl/glew.h> // this must be before gl/GL.h
@@ -119,6 +120,8 @@ GLint linkProgram(GLuint programId);
  */
 GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
 
+void GenerateSphere(float radius, float sectorCount, float stackCount);
+
 /**
  * @brief Load texture into memory
  *
@@ -127,7 +130,7 @@ GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
  *
  * @returns texture id
  */
-void  loadGLTexture(GLuint* texture, const char* filename);
+void loadGLTexture(GLuint* texture, const char* filename);
 
 /* Global variable declaration */
 GLuint shaderProgramObject;
@@ -139,11 +142,34 @@ GLuint projectionMatrixUniform;
 GLuint vao;
 GLuint vboPosition;
 GLuint diffuseTextureUniform;
+GLuint specularTextureUniform;
 GLuint vboTexCoords;
 GLuint textureFloor;
+GLuint textureSpecular;
 
-mat4 perspectiveProjectionMatrix;
-vec3 lightPosition;
+mat4   perspectiveProjectionMatrix;
+vec3   lightPosition;
+GLuint vao_sphere          = 0U;
+GLuint vbo_sphere_position = 0U;
+GLuint vbo_sphere_normal   = 0U;
+GLuint vbo_sphere_texcoord = 0U;
+GLuint vbo_sphere_indices  = 0U;
+
+std::vector<float> vertices;
+std::vector<float> normals;
+std::vector<float> texcoords;
+std::vector<int>   indices;
+
+GLfloat lightAmbient[]  = {0.3f, 0.3f, 0.3f, 3.0f};   // grey ambient light
+GLfloat lightDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f};   // white diffused light
+GLfloat lightSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f};   // specular color
+GLfloat lightPosition[] = {10.0f, 0.0f, 10.0f, 1.0f}; // position of light
+/* Light uniforms */
+GLuint lightAmbientUniform  = 0;
+GLuint lightDiffuseUniform  = 0;
+GLuint lightSpecularUniform = 0;
+GLuint lightPositionUniform = 0;
+
 
 /* Windows related variable declaration */
 FILE*           gpFile       = NULL;                      // file pointer for logging
@@ -455,31 +481,78 @@ int initialize(void)
     fprintf(gpFile, "GLSL Version      : %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     const GLchar* vertexShaderSourceCode =
-        "#version 450 core"
+        "#version 460 core"
         "\n"
-        "in vec3 vPosition;"
-        "in vec2 vTexCoord;"
-        "out vec2 out_texCoord;"
-        "uniform mat4 u_modelMatrix;"
-        "uniform mat4 u_viewMatrix;"
-        "uniform mat4 u_projectionMatrix;"
+        "in vec3 aPosition;"
+        "in vec3 aNormal;"
+        "in vec2 aTexCoord;"
+        "\n"
+        "out vec2 oTexCoord;"
+        "out vec3 oLightDirection;"
+        "out vec3 oViewDirection;"
+        "\n"
+        "uniform mat4 uModelMatrix;"
+        "uniform mat4 uViewMatrix;"
+        "uniform mat4 uProjectionMatrix;"
+        "uniform vec3 uLightPosition;"
+        "uniform vec3 uViewPosition;"
+        "\n"
         "void main(void)"
         "{"
-        "   out_texCoord = vTexCoord;"
-        "   gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix *  vec4(vPosition, 1.0f);"
+        "\n"
+        "   vec3 aTangent = normalize(vec3(-aPosition.z, 0, -aPosition.x));"
+        "   mat3 normalMatrix = transpose(inverse(mat3(uModelMatrix)));"
+        "   vec3 T = normalize(normalMatrix * aTangent);"
+        "   vec3 N = normalize(normalMatrix * aNormal);"
+        "   T = normalize(T - dot(T, N) * N);"
+        "   vec3 B = cross(N, T);"
+        "   mat3 TBN = transpose(mat3(T, B, N));"
+        "\n"
+        "   vec3 oTangentLightPos = TBN * uLightPosition;"
+        "   vec3 oTangentViewPos  = TBN * uViewPosition;"
+        "   vec3 tangentFragPos   = vec3(uModelMatrix * vec4(aPosition, 1.0f));"
+        "   oLightDirection = oTangentLightPos - tangentFragPos;"
+        "   oViewDirection  = oTangentViewPos - tangentFragPos;"
+        "\n"
+        "   gl_Position = uProjectionMatrix * uViewMatrix * vec4(tangentFragPos, 1.0f);"
+        "   oTexCoord = aTexCoord;"
         "}";
 
     const GLchar* fragmentShaderSourceCode =
-        "#version 450 core"
+        "#version 460 core"
         "\n"
-        "layout(binding = 0)uniform sampler2D diffuse_texture;"
-        "in vec2 out_texCoord;"
+        "in vec2 oTexCoord;"
+        "in vec3 oLightDirection;"
+        "in vec3 oViewDirection;"
+        "\n"
         "out vec4 FragColor;"
+        "\n"
+        "uniform sampler2D uDiffuseSampler;"
+        "uniform sampler2D uSpecularSampler;"
+        "uniform sampler2D uNormalSampler;"
+        "\n"
+        "uniform vec3 uLightAmbient;"
+        "uniform vec3 uLightDiffused;"
+        "uniform vec3 uLightSpecular;"
+        "\n"
         "void main(void)"
         "{"
-        "   FragColor = texture(diffuse_texture, out_texCoord);"
-        "}";
+        "   vec3 normal = normalize(texture(uNormalSampler, oTexCoord).rgb * 2.0f - 1.0f);"
+        "   vec3 color  = texture(uDiffuseSampler, oTexCoord).rgb;"
+        "   vec3 spec1  = texture(uSpecularSampler, oTexCoord).rgb;"
+        "\n"
+        "   vec3 lightDirection = normalize(oLightDirection);"
+        "   vec3 view_direction = normalize(oViewDirection);"
+        "   vec3 reflect_direction = reflect(-lightDirection, normal);"
+        "   vec3 halfway_direction = normalize(lightDirection + view_direction);"
+        "\n"
+        "   vec3 ambient  = uLightAmbient * color;"
+        "   vec3 diffuse  = uLightDiffused * color * max(dot(lightDirection, normal), 0.0f);"
+        "   vec3 specular = uLightSpecular * spec1 * pow(max(dot(normal, halfway_direction), 0.0f), 50);"
 
+        "   vec3 finalLight = ambient + diffuse + specular;"
+        "   FragColor = vec4(finalLight, 1.0f);"
+        "}";
     shaderProgramObject = loadShaders(vertexShaderSourceCode, fragmentShaderSourceCode);
     if (0U == shaderProgramObject)
     {
@@ -487,10 +560,9 @@ int initialize(void)
         return -1;
     }
 
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMAL, "vNormal");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TEXCOORD, "vTexCoord");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TANGENT, "vTangent");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "aPosition");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMAL, "aNormal");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TEXCOORD, "aTexCoord");
 
     if (0U == linkProgram(shaderProgramObject))
     {
@@ -500,32 +572,33 @@ int initialize(void)
 
     fprintf(gpFile, "-> shader program linked successfully\n");
 
-    modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "u_modelMatrix");
-    viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "u_viewMatrix");
-    projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "u_projectionMatrix");
-    diffuseTextureUniform   = glGetUniformLocation(shaderProgramObject, "diffuse_texture");
-	
-	/* Shader data */
-	const GLfloat vertices[] = {
-		-1.0f, 1.0f,  0.0f, // top-left
-		-1.0f, -1.0f, 0.0f, // bottom-left
-		1.0f,  -1.0f, 0.0f, // bottom-right
-		1.0f,  1.0f,  0.0f, // top-right
-	};
+    modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "uModelMatrix");
+    viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
+    projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
+    diffuseTextureUniform   = glGetUniformLocation(shaderProgramObject, "uDiffuseSampler");
+    specularTextureUniform  = glGetUniformLocation(shaderProgramObject, "specular_texture");
 
-	const GLfloat texCoords[] = {
-		0.0f, 1.0f, // top-left
-		0.0f, 0.0f, // bottom-left
-		1.0f, 0.0f, // bottom-right
-		1.0f, 1.0f  // top-right
-	};
+    /* Shader data */
+    const GLfloat vertices1[] = {
+        -1.0f, 1.0f,  0.0f, // top-left
+        -1.0f, -1.0f, 0.0f, // bottom-left
+        1.0f,  -1.0f, 0.0f, // bottom-right
+        1.0f,  1.0f,  0.0f, // top-right
+    };
+
+    const GLfloat texCoords[] = {
+        0.0f, 1.0f, // top-left
+        0.0f, 0.0f, // bottom-left
+        1.0f, 0.0f, // bottom-right
+        1.0f, 1.0f  // top-right
+    };
 
     // setup vao and vbo
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
     glGenBuffers(1, &vboPosition);
     glBindBuffer(GL_ARRAY_BUFFER, vboPosition);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices1), vertices1, GL_STATIC_DRAW);
     glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -539,7 +612,47 @@ int initialize(void)
     glBindVertexArray(0);
 
     perspectiveProjectionMatrix = mat4::identity();
-    loadGLTexture(&textureFloor, "textures/marble_albedo.png");
+    loadGLTexture(&textureFloor, "textures/earthmap1k.jpg");
+    loadGLTexture(&textureSpecular, "textures/earthspec1k.jpg");
+
+    // construct sphere data
+    GenerateSphere(1.0f, 50, 50);
+
+    // setup vao and vbo
+    glGenVertexArrays(1, &vao_sphere);
+    glBindVertexArray(vao_sphere);
+
+    glGenBuffers(1, &vbo_sphere_position);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_position);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glGenBuffers(1, &vbo_sphere_normal);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_normal);
+    glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(float), normals.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glGenBuffers(1, &vbo_sphere_texcoord);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_texcoord);
+    glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glGenBuffers(1, &vbo_sphere_indices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_sphere_indices);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(float), indices.data(), GL_STATIC_DRAW);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     /* Depth */
     glClearDepth(1.0f);
@@ -552,51 +665,6 @@ int initialize(void)
     return (0);
 }
 
-void loadGLTexture(GLuint* texture, const char* filename)
-{
-    unsigned char* data      = NULL;
-    int            width     = 0;
-    int            height    = 0;
-    int            nChannels = 0;
-    GLenum         format    = GL_RGB;
-
-    data = stbi_load(filename, &width, &height, &nChannels, 0);
-    if (data == NULL)
-    {
-        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
-        DestroyWindow(gHwnd);
-    }
-
-    if (nChannels == 1)
-    {
-        format = GL_RED;
-    }
-    else if (nChannels == 3)
-    {
-        format = GL_RGB;
-    }
-    else if (nChannels == 4)
-    {
-        format = GL_RGBA;
-    }
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glGenTextures(1, texture);
-    glBindTexture(GL_TEXTURE_2D, *texture);
-
-    // set up texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-    // push the data to texture memory
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(data);
-    data = NULL;
-}
-
 void resize(int width, int height)
 {
     if (height == 0)
@@ -606,8 +674,8 @@ void resize(int width, int height)
 
     perspectiveProjectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
 }
-
-void display(void)
+float angleEarth = 0.0f;
+void  display(void)
 {
     mat4 modelMatrix;
     mat4 viewMatrix;
@@ -616,10 +684,10 @@ void display(void)
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(shaderProgramObject);
-    glBindVertexArray(vao);
+    glBindVertexArray(vao_sphere);
     {
-        viewMatrix  = lookat(vec3(0.0f, 0.0f, 50.0f), vec3(0.0f, -1.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
-        modelMatrix = translate(0.0f, 0.0f, 0.0f) * scale(10.0f, 10.0f, 10.0f);
+        viewMatrix  = lookat(vec3(0.0f, 0.0f, 5.0f), vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
+        modelMatrix = translate(0.0f, 0.0f, 0.0f) * scale(1.0f, 1.0f, 1.0f) * rotate(-90.0f, 1.0f, 0.0f, 0.0f) * rotate(angleEarth, 0.0f, 0.0f, 1.0f);
         glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
         glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, perspectiveProjectionMatrix);
@@ -628,11 +696,21 @@ void display(void)
         glBindTexture(GL_TEXTURE_2D, textureFloor);
         glUniform1i(diffuseTextureUniform, 0);
 
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, textureSpecular);
+        glUniform1i(specularTextureUniform, 1);
+
+        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, NULL);
     }
     glBindVertexArray(0);
     glUseProgram(0);
     glFlush();
+
+    angleEarth += 1.0;
+    if (360.0f < angleEarth)
+    {
+        angleEarth = angleEarth - 360.0f;
+    }
 }
 
 void uninitialize(void)
@@ -656,10 +734,45 @@ void uninitialize(void)
     }
 
     // release textures
-    if (textureFloor)
+    if (0U != textureFloor)
     {
         glDeleteTextures(1, &textureFloor);
         textureFloor = 0;
+    }
+    if (0U != textureSpecular)
+    {
+        glDeleteTextures(1, &textureSpecular);
+        textureSpecular = 0;
+    }
+
+    if (0U != vao_sphere)
+    {
+        glDeleteVertexArrays(1, &vao_sphere);
+        vao_sphere = 0U;
+    }
+
+    if (0U != vbo_sphere_position)
+    {
+        glDeleteBuffers(1, &vbo_sphere_position);
+        vbo_sphere_position = 0U;
+    }
+
+    if (0U != vbo_sphere_normal)
+    {
+        glDeleteBuffers(1, &vbo_sphere_normal);
+        vbo_sphere_normal = 0U;
+    }
+
+    if (0U != vbo_sphere_texcoord)
+    {
+        glDeleteBuffers(1, &vbo_sphere_texcoord);
+        vbo_sphere_texcoord = 0U;
+    }
+
+    if (0U != vbo_sphere_indices)
+    {
+        glDeleteBuffers(1, &vbo_sphere_indices);
+        vbo_sphere_indices = 0U;
     }
 
     // safe shader cleanup
@@ -794,4 +907,119 @@ GLint linkProgram(GLuint programId)
         }
     }
     return status;
+}
+
+void GenerateSphere(float radius, float sectorCount, float stackCount)
+{
+    float x, y, z, xy;
+    float nx, ny, nz, lengthInv = 1.0f / radius;
+    float s, t;
+    int   t1, t2;
+
+    float sectorStep = 2.0f * M_PI / sectorCount;
+    float stackStep  = M_PI / stackCount;
+    float sectorAngle, stackAngle;
+
+    for (int i = 0; i <= stackCount; i++)
+    {
+        stackAngle = M_PI / 2.0f - i * stackStep;
+        xy         = radius * cosf(stackAngle);
+        z          = radius * sinf(stackAngle);
+
+        for (int j = 0; j <= sectorCount; j++)
+        {
+            sectorAngle = j * sectorStep;
+
+            x = xy * cosf(sectorAngle);
+            y = xy * sinf(sectorAngle);
+
+            vertices.push_back(x);
+            vertices.push_back(y);
+            vertices.push_back(z);
+
+            // normals
+            nx = x * lengthInv;
+            ny = y * lengthInv;
+            nz = z * lengthInv;
+
+            normals.push_back(nx);
+            normals.push_back(ny);
+            normals.push_back(nz);
+
+            // texcoords
+            s = (float)j / sectorCount;
+            t = (float)i / stackCount;
+
+            texcoords.push_back(s);
+            texcoords.push_back(t);
+        }
+    }
+
+    for (int i = 0; i < stackCount; i++)
+    {
+        t1 = i * (sectorCount + 1);
+        t2 = t1 + sectorCount + 1;
+
+        for (int j = 0; j < sectorCount; j++, t1++, t2++)
+        {
+            if (i != 0)
+            {
+                indices.push_back(t1);
+                indices.push_back(t2);
+                indices.push_back(t1 + 1);
+            }
+
+            if (i != (stackCount - 1))
+            {
+                indices.push_back(t1 + 1);
+                indices.push_back(t2);
+                indices.push_back(t2 + 1);
+            }
+        }
+    }
+}
+
+void loadGLTexture(GLuint* texture, const char* filename)
+{
+    unsigned char* data      = NULL;
+    int            width     = 0;
+    int            height    = 0;
+    int            nChannels = 0;
+    GLenum         format    = GL_RGB;
+
+    data = stbi_load(filename, &width, &height, &nChannels, 0);
+    if (data == NULL)
+    {
+        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
+        DestroyWindow(gHwnd);
+    }
+
+    if (nChannels == 1)
+    {
+        format = GL_RED;
+    }
+    else if (nChannels == 3)
+    {
+        format = GL_RGB;
+    }
+    else if (nChannels == 4)
+    {
+        format = GL_RGBA;
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glGenTextures(1, texture);
+    glBindTexture(GL_TEXTURE_2D, *texture);
+
+    // set up texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+    // push the data to texture memory
+    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(data);
+    data = NULL;
 }
