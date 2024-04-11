@@ -1,41 +1,48 @@
 /**
  * @file    ogl.cpp
- * @brief   Smiley Texture
+ * @brief   Template file for texture mapping
  * @author  Rohit Nimkar
- * @date    28/01/2024
+ * @date    09/04/2024
  * @version 1.1
  */
+
+/* Link with OpenGl libraries */
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "kernel32.lib")
+#pragma comment(lib, "glew32.lib")
+#pragma comment(lib, "OpenGL32.lib")
 
 /* Windows Header files */
 #include <Windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "vmath.h"
-using namespace vmath;
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
 /* OpenGL header files */
 #include <gl/glew.h> // this must be before gl/GL.h
 #include <gl/GL.h>
-#include "ogl.h"
+
+/* External libraries */
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#include "vmath.h"
+using namespace vmath;
+
+/* Program headers */
+#include "OGL.h"
 
 /* Macro definitions */
 #define WIN_WIDTH     800
 #define WIN_HEIGHT    600
 #define UNUSED_VAL(x) ((void)x)
 
-/* Link with OpenGl libraries */
-#pragma comment(lib, "glew32.lib")
-#pragma comment(lib, "OpenGL32.lib")
-
 enum
 {
     AMC_ATTRIBUTE_POSITION = 0,
-    AMC_ATTRIBUTE_COLOR,
-    AMC_ATTRIBUTE_UV
+    AMC_ATTRIBUTE_NORMAL,
+    AMC_ATTRIBUTE_TEXCOORD,
+    AMC_ATTRIBUTE_TANGENT
 };
 
 /**
@@ -47,7 +54,7 @@ enum
  * @param lParam [in] - Long parameter
  * @return Success or failure
  */
-LRESULT CALLBACK wndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 /**
  * @brief initilize OpenGL context
@@ -84,12 +91,6 @@ void ToggleFullScreen(void);
 void resize(int width, int height);
 
 /**
- * @brief Print OpenGL driver information and
- *   supported extensions
- */
-void printGLInfo(void);
-
-/**
  * @brief Compile shader
  *
  * @param shaderId     [in] - shader identifier
@@ -118,79 +119,41 @@ GLint linkProgram(GLuint programId);
  */
 GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
 
+/**
+ * @brief Load texture into memory
+ *
+ * @param texture  [out] - pointer to texture id
+ * @param filename [in]  - file name
+ *
+ * @returns texture id
+ */
+void  loadGLTexture(GLuint* texture, const char* filename);
+
 /* Global variable declaration */
-FILE*           gpFile       = NULL;
-HWND            gHwnd        = NULL; // global window handle
-BOOL            gbActive     = FALSE;
+GLuint shaderProgramObject;
+
+GLuint modelMatrixUniform;
+GLuint viewMatrixUniform;
+GLuint projectionMatrixUniform;
+
+GLuint vao;
+GLuint vboPosition;
+GLuint diffuseTextureUniform;
+GLuint vboTexCoords;
+GLuint textureFloor;
+
+mat4 perspectiveProjectionMatrix;
+vec3 lightPosition;
+
+/* Windows related variable declaration */
+FILE*           gpFile       = NULL;                      // file pointer for logging
+HWND            gHwnd        = NULL;                      // global window handle
+BOOL            gbActive     = FALSE;                     // indicate if window is active
 DWORD           gdwStyle     = 0;                         // unsigned long 32bit
 WINDOWPLACEMENT gwpPrev      = {sizeof(WINDOWPLACEMENT)}; // previous window placement
 BOOL            gbFullScreen = FALSE;                     // win32s BOOL not c++ bool
 HDC             ghdc         = NULL;                      // global handle for device context
 HGLRC           ghrc         = NULL;                      // Global handle for rendering context
-
-const GLchar* vertexShaderSourceCode =
-    "#version 460 core"
-    "\n"
-    "in      vec4 aPosition;"
-    "in      vec2 aTexCoord;"
-    "out     vec2 oTexCoord;"
-    "uniform mat4 uMVPMatrix;"
-    "void main(void)"
-    "{"
-    "   gl_Position = uMVPMatrix * aPosition;"
-    "   oTexCoord         = aTexCoord;"
-    "}";
-
-GLuint vertexShaderObject = 0U;
-
-const GLchar* fragmentShaderSourceCode =
-    "#version 460 core"
-    "\n"
-    "in       vec2      oTexCoord;"
-    "uniform  sampler2D uTextureSampler;"
-    "out      vec4      FragColor;"
-    "void main(void)"
-    "{"
-    "   FragColor = texture(uTextureSampler, oTexCoord);"
-    "}";
-
-GLuint fragmentShaderObject = 0U;
-
-GLuint shaderProgramId = 0U;
-
-// clang-format off
-
-const GLfloat cube_positions[] = 
-{
-    /* Front */
-     1.0f,  1.0f, 0.0f,
-    -1.0f,  1.0f, 0.0f,
-    -1.0f, -1.0f, 0.0f,
-     1.0f, -1.0f, 0.0f,
-};
-
-
-const GLfloat cube_uvs[] = 
-{
-    /* Front */
-    1.0f, 1.0f,
-    0.0f, 1.0f, 
-    0.0f, 0.0f,
-    1.0f, 0.0f, 
-};
-
-// clang-format on
-
-GLuint vao         = 0U;
-GLuint vboPosition = 0U;
-GLuint vboTexCoord = 0U;
-
-vmath::mat4 modelViewProjectionMatrix   = {};
-vmath::mat4 perspectiveProjectionMatrix = {};
-GLuint      mvpMatrixUniform            = 0U;
-GLuint      textureSamplerUniform       = 0U;
-
-GLuint textureSmiley = 0U;
 
 /**
  * @brief Entry point function for Win32 Desktop application
@@ -229,7 +192,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     wndclass.style       = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;    // redraw after resize (class style)
     wndclass.cbClsExtra  = 0;                                     // count of extra bytes in Class
     wndclass.cbWndExtra  = 0;                                     // count of extra bytes in window
-    wndclass.lpfnWndProc = wndProc;                               // windows procedure callback function
+    wndclass.lpfnWndProc = WndProc;                               // windows procedure callback function
     wndclass.hInstance   = hInstance;                             // give current program instance to handl
     wndclass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH); // gdi32.dll handle OF Stock brush from os  (getstockobjext => brush,font,paint ret val HGDIIBJ => handle graphic device interface obj )
     wndclass.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(MYICON)); // to give our icon to our window..make resource from given int which is in rc file
@@ -297,7 +260,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
             {
                 /* If window is focused then display the window and update state */
                 display();
-                update();
+
+                SwapBuffers(ghdc);
+                // update();
             }
         }
     }
@@ -308,7 +273,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     return (int)msg.wParam;
 }
 
-LRESULT CALLBACK wndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (iMsg)
     {
@@ -412,46 +377,6 @@ void ToggleFullScreen(void)
     }
 }
 
-BOOL loadGLTexture(GLuint* texture, const char* filename)
-{
-    // variable declarations
-    unsigned char* pixel_data = NULL;
-    int            width, height, nrComponents;
-    GLenum         format;
-
-    // code
-    pixel_data = stbi_load(filename, &width, &height, &nrComponents, 0);
-    if (pixel_data == NULL)
-    {
-        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
-        DestroyWindow(gHwnd);
-    }
-
-    if (nrComponents == 1)
-        format = GL_RED;
-    else if (nrComponents == 3)
-        format = GL_RGB;
-    else if (nrComponents == 4)
-        format = GL_RGBA;
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glGenTextures(1, texture);
-    glBindTexture(GL_TEXTURE_2D, *texture);
-
-    // set up texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-    // push the data to texture memory
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)pixel_data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(pixel_data);
-    pixel_data = NULL;
-    return TRUE;
-}
-
 int initialize(void)
 {
     PIXELFORMATDESCRIPTOR pfd               = {};
@@ -522,221 +447,272 @@ int initialize(void)
         return (-6);
     }
 
-    printGLInfo();
-    /* Step4: Check compilation errors */
-    GLint   status        = 0;
-    GLint   infoLogLength = 0;
-    GLchar* szInfoLog     = nullptr;
-     shaderProgramId = loadShaders(vertexShaderSourceCode, fragmentShaderSourceCode);
-    if (0U == shaderProgramId)
+    // opengl related log
+    fprintf(gpFile, "OpenGL Information\n");
+    fprintf(gpFile, "OpenGL Vendor     : %s\n", glGetString(GL_VENDOR));
+    fprintf(gpFile, "OpenGL Renderer   : %s\n", glGetString(GL_RENDERER));
+    fprintf(gpFile, "OpenGL Version    : %s\n", glGetString(GL_VERSION));
+    fprintf(gpFile, "GLSL Version      : %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    const GLchar* vertexShaderSourceCode =
+        "#version 450 core"
+        "\n"
+        "in vec3 vPosition;"
+        "in vec2 vTexCoord;"
+        "out vec2 out_texCoord;"
+        "uniform mat4 u_modelMatrix;"
+        "uniform mat4 u_viewMatrix;"
+        "uniform mat4 u_projectionMatrix;"
+        "void main(void)"
+        "{"
+        "   out_texCoord = vTexCoord;"
+        "   gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix *  vec4(vPosition, 1.0f);"
+        "}";
+
+    const GLchar* fragmentShaderSourceCode =
+        "#version 450 core"
+        "\n"
+        "layout(binding = 0)uniform sampler2D diffuse_texture;"
+        "in vec2 out_texCoord;"
+        "out vec4 FragColor;"
+        "void main(void)"
+        "{"
+        "   FragColor = texture(diffuse_texture, out_texCoord);"
+        "}";
+
+    shaderProgramObject = loadShaders(vertexShaderSourceCode, fragmentShaderSourceCode);
+    if (0U == shaderProgramObject)
     {
-        fprintf(gpFile, "Failed to load shaders \n");
+        fprintf(gpFile, "-> Failed to load shaders into memory\n");
         return -1;
     }
-    fprintf(gpFile, "Shaders loaded successfully \n");
 
-    /* Step 7: Bind attaribute location with shader program object */
-    glBindAttribLocation(shaderProgramId, AMC_ATTRIBUTE_POSITION, "aPosition");
-    glBindAttribLocation(shaderProgramId, AMC_ATTRIBUTE_UV, "aTexCoord");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMAL, "vNormal");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TEXCOORD, "vTexCoord");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TANGENT, "vTangent");
 
-    if (GL_FALSE == linkProgram(shaderProgramId))
+    if (0U == linkProgram(shaderProgramObject))
     {
-        fprintf(gpFile, "Failed to link shaders\n");
-        glDeleteProgram(shaderProgramId);
+        fprintf(gpFile, "-> Failed to link shader program\n");
         return -1;
     }
-    fprintf(gpFile, "Program compiled successfully \n");
 
-    // loading images to create texture
-    bResult = loadGLTexture(&textureSmiley, "Smiley.bmp");
-    if (bResult == FALSE)
-    {
-        fprintf(gpFile, "loading of smiley texture failed\n");
-        return -6;
-    }
+    fprintf(gpFile, "-> shader program linked successfully\n");
 
-    /* Enable texture */
-    glEnable(GL_TEXTURE_2D);
+    modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "u_modelMatrix");
+    viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "u_viewMatrix");
+    projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "u_projectionMatrix");
+    diffuseTextureUniform   = glGetUniformLocation(shaderProgramObject, "diffuse_texture");
+	
+	/* Shader data */
+	const GLfloat vertices[] = {
+		-1.0f, 1.0f,  0.0f, // top-left
+		-1.0f, -1.0f, 0.0f, // bottom-left
+		1.0f,  -1.0f, 0.0f, // bottom-right
+		1.0f,  1.0f,  0.0f, // top-right
+	};
 
-    mvpMatrixUniform      = glGetUniformLocation(shaderProgramId, "uMVPMatrix");
-    textureSamplerUniform = glGetUniformLocation(shaderProgramId, "uTextureSampler");
+	const GLfloat texCoords[] = {
+		0.0f, 1.0f, // top-left
+		0.0f, 0.0f, // bottom-left
+		1.0f, 0.0f, // bottom-right
+		1.0f, 1.0f  // top-right
+	};
 
-    /* Sqaure */
+    // setup vao and vbo
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
-
     glGenBuffers(1, &vboPosition);
     glBindBuffer(GL_ARRAY_BUFFER, vboPosition);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cube_positions), cube_positions, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
-    glBindBuffer(GL_ARRAY_BUFFER, 0U);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    glGenBuffers(1, &vboTexCoord);
-    glBindBuffer(GL_ARRAY_BUFFER, vboTexCoord);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cube_uvs), cube_uvs, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_UV, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_UV);
-    glBindBuffer(GL_ARRAY_BUFFER, 0U);
+    glGenBuffers(1, &vboTexCoords);
+    glBindBuffer(GL_ARRAY_BUFFER, vboTexCoords);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(texCoords), texCoords, GL_STATIC_DRAW);
+    glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 
-    glBindVertexArray(0U);
+    perspectiveProjectionMatrix = mat4::identity();
+    loadGLTexture(&textureFloor, "textures/marble_albedo.png");
 
-    /* Enabling Depth */
-    glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
-    glEnable(GL_DEPTH_TEST); //[Compulsory] enable depth test
-    glDepthFunc(GL_LEQUAL);  //[Compulsory] Which function to use for testing
+    /* Depth */
+    glClearDepth(1.0f);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    return 0;
+
+    resize(WIN_WIDTH, WIN_HEIGHT);
+    return (0);
 }
 
-void printGLInfo(void)
+void loadGLTexture(GLuint* texture, const char* filename)
 {
-    GLint nExtensions = 0;
-    GLint idx         = 0;
+    unsigned char* data      = NULL;
+    int            width     = 0;
+    int            height    = 0;
+    int            nChannels = 0;
+    GLenum         format    = GL_RGB;
 
-    fprintf(gpFile, "OpenGL Vendor: %s\n", glGetString(GL_VENDOR));
-    fprintf(gpFile, "OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
-    fprintf(gpFile, "OpenGL Version: %s\n", glGetString(GL_VERSION));
-    fprintf(gpFile, "OpenGL SL Version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+    data = stbi_load(filename, &width, &height, &nChannels, 0);
+    if (data == NULL)
+    {
+        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
+        DestroyWindow(gHwnd);
+    }
 
-    /* List supported extensions */
-    glGetIntegerv(GL_NUM_EXTENSIONS, &nExtensions);
-    for (idx = 0; idx < nExtensions; ++idx) { fprintf(gpFile, "%s\n", glGetStringi(GL_EXTENSIONS, idx)); }
+    if (nChannels == 1)
+    {
+        format = GL_RED;
+    }
+    else if (nChannels == 3)
+    {
+        format = GL_RGB;
+    }
+    else if (nChannels == 4)
+    {
+        format = GL_RGBA;
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glGenTextures(1, texture);
+    glBindTexture(GL_TEXTURE_2D, *texture);
+
+    // set up texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+    // push the data to texture memory
+    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(data);
+    data = NULL;
 }
 
 void resize(int width, int height)
 {
-    if (height <= 0)
+    if (height == 0)
         height = 1;
 
-    perspectiveProjectionMatrix = vmath::perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+
+    perspectiveProjectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
 }
 
 void display(void)
 {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the window with color whose bit is set, all bits in depth buffer set to 1 (if value is 1 or lower because of LEQUAL)
+    mat4 modelMatrix;
+    mat4 viewMatrix;
+    mat4 shadowMatrix;
+    mat4 mvpMatrix;
 
-    glUseProgram(shaderProgramId);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(shaderProgramObject);
     glBindVertexArray(vao);
     {
-    /* cube */
-    modelViewProjectionMatrix     = vmath::mat4::identity();
-    vmath::mat4 translationMatrix = vmath::mat4::identity();
-    translationMatrix             = vmath::translate(0.0f, 0.0f, -6.0f);
-    modelViewProjectionMatrix     = perspectiveProjectionMatrix * translationMatrix;
+        viewMatrix  = lookat(vec3(0.0f, 0.0f, 50.0f), vec3(0.0f, -1.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
+        modelMatrix = translate(0.0f, 0.0f, 0.0f) * scale(10.0f, 10.0f, 10.0f);
+        glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
+        glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
+        glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, perspectiveProjectionMatrix);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textureSmiley);
-    glUniform1i(textureSamplerUniform, 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureFloor);
+        glUniform1i(diffuseTextureUniform, 0);
 
-    glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, modelViewProjectionMatrix);
-    glVertexAttrib3f(AMC_ATTRIBUTE_COLOR, 1.0f, 1.0f, 1.0f);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
     }
+    glBindVertexArray(0);
     glUseProgram(0);
-    glBindVertexArray(0U);
-
-    SwapBuffers(ghdc);
-}
-
-void update(void)
-{
+    glFlush();
 }
 
 void uninitialize(void)
 {
-    if (0U != shaderProgramId)
-    {
-        glUseProgram(shaderProgramId);
-        /* Get no. of attached shaders */
-        GLint nShaders = 0;
-        glGetProgramiv(shaderProgramId, GL_ATTACHED_SHADERS, &nShaders);
-        if (0 < nShaders)
-        {
-            GLuint* pShaders = new GLuint[nShaders]();
-            if (nullptr != pShaders)
-            {
-                glGetAttachedShaders(shaderProgramId, nShaders, nullptr, pShaders);
-                for (GLuint idx = 0U; idx <= nShaders; ++idx)
-                {
-                    glDetachShader(shaderProgramId, pShaders[idx]);
-                    glDeleteShader(pShaders[idx]);
-                    pShaders[idx] = 0U;
-                }
-                delete[] pShaders;
-                pShaders = nullptr;
-            }
-        }
-        glUseProgram(0U);
-        glDeleteProgram(shaderProgramId);
-        shaderProgramId = 0U;
-    }
-
-    /* cube */
-    if (0U != vboTexCoord)
-    {
-        glDeleteBuffers(1, &vboTexCoord);
-        vboTexCoord = 0U;
-    }
-
-    if (0 != textureSmiley)
-    {
-        glDeleteTextures(1, &textureSmiley);
-        textureSmiley = 0;
-    }
-
-    if (0U != vboPosition)
-    {
-        glDeleteBuffers(1, &vboPosition);
-        vboPosition = 0U;
-    }
-
-    if (0U != vao)
+    if (vao)
     {
         glDeleteVertexArrays(1, &vao);
-        vao = 0U;
+        vao = 0;
     }
 
-    if (gbFullScreen == TRUE)
+    if (vboPosition)
     {
-        ToggleFullScreen();
-        gbFullScreen = FALSE;
+        glDeleteBuffers(1, &vboPosition);
+        vboPosition = 0;
     }
 
-    /* reset rendering context */
-    if (wglGetCurrentContext() == ghrc) // if current context is ghrc  then make current context as NULL
+    if (vboTexCoords)
     {
-        wglMakeCurrent(nullptr, nullptr); // make current context NULL
+        glDeleteBuffers(1, &vboTexCoords);
+        vboTexCoords = 0;
     }
 
-    /* Delete OpenGL rendering context */
-    if (ghrc)
+    // release textures
+    if (textureFloor)
+    {
+        glDeleteTextures(1, &textureFloor);
+        textureFloor = 0;
+    }
+
+    // safe shader cleanup
+    if (shaderProgramObject)
+    {
+        GLsizei shader_count;
+        GLuint* p_shaders = NULL;
+
+        glUseProgram(shaderProgramObject);
+        glGetProgramiv(shaderProgramObject, GL_ATTACHED_SHADERS, &shader_count);
+
+        p_shaders = (GLuint*)malloc(shader_count * sizeof(GLuint));
+        memset((void*)p_shaders, 0, shader_count * sizeof(GLuint));
+
+        glGetAttachedShaders(shaderProgramObject, shader_count, &shader_count, p_shaders);
+
+        for (GLsizei i = 0; i < shader_count; i++)
+        {
+            glDetachShader(shaderProgramObject, p_shaders[i]);
+            glDeleteShader(p_shaders[i]);
+            p_shaders[i] = 0;
+        }
+
+        free(p_shaders);
+        p_shaders = NULL;
+
+        glDeleteProgram(shaderProgramObject);
+        shaderProgramObject = 0;
+        glUseProgram(0);
+    }
+
+    if (wglGetCurrentContext() == ghrc)
+    {
+        wglMakeCurrent((HDC)NULL, (HGLRC)NULL);
+    }
+
+    if (NULL != ghrc)
     {
         wglDeleteContext(ghrc);
-        ghrc = nullptr;
+        ghrc = (HGLRC)NULL;
     }
 
-    /* release global dc */
-    if (ghdc)
+    if (NULL != ghdc)
     {
-        ReleaseDC(gHwnd, ghdc); // gHwnd => whose windows ghdc =>which ghdc
-        ghdc = nullptr;
+        ReleaseDC(gHwnd, ghdc);
+        ghdc = (HDC)NULL;
     }
 
-    /* Destroy window */
-    if (gHwnd)
+    if (NULL != gpFile)
     {
-        DestroyWindow(gHwnd);
-        gHwnd = nullptr;
-    }
-
-    /* Close logging file */
-    if (gpFile)
-    {
-        fprintf(gpFile, "Program for base code terminated successfully!!!!\n");
+        fprintf(gpFile, "\n----- Program Completed Successfully -----\n");
         fclose(gpFile);
-        gpFile = nullptr;
+        gpFile = NULL;
     }
 }
 
@@ -800,27 +776,6 @@ GLint linkProgram(GLuint programId)
     GLint nShaders = 0;
 
     glLinkProgram(programId);
-
-    glUseProgram(programId);
-    glGetProgramiv(programId, GL_ATTACHED_SHADERS, &nShaders);
-    if (0 < nShaders)
-    {
-        GLuint* pShaders = new GLuint[nShaders]();
-        if (nullptr != pShaders)
-        {
-            glGetAttachedShaders(programId, nShaders, nullptr, pShaders);
-            for (GLint idx = 0U; idx <= nShaders; ++idx)
-            {
-                glDetachShader(programId, pShaders[idx]);
-                glDeleteShader(pShaders[idx]);
-                pShaders[idx] = 0U;
-            }
-            delete[] pShaders;
-            pShaders = nullptr;
-        }
-    }
-    glUseProgram(0U);
-
     glGetProgramiv(programId, GL_LINK_STATUS, &status);
     if (GL_FALSE == status)
     {
@@ -839,31 +794,4 @@ GLint linkProgram(GLuint programId)
         }
     }
     return status;
-}
-
-GLuint loadGLTexture(const char* image)
-{
-    GLint  width, height;
-    GLuint textureId;
-    glGenTextures(1, &textureId);
-    glBindTexture(GL_TEXTURE_2D, textureId);
-    /* alignment and unpacking */
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-    /* set texture filtering parameters */
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    /* load image, create texture and generate mipmaps */
-    unsigned char* data = stbi_load(image, &width, &height, NULL, 0);
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-    }
-    else
-    {
-        fprintf(gpFile, "Failed to load texture %s\n", image);
-    }
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(data);
-    return textureId;
 }
