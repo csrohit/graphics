@@ -1,0 +1,4 @@
+#include <Windows.h>
+#include "OGL.h"
+MYICON ICON rohit.ico
+MYSMILEY BITMAP Smiley.bmp 
