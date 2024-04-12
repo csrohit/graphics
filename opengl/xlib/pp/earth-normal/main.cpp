@@ -25,6 +25,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <GL/glx.h>
+#include <vector>
 
 /*--- Program headers ---*/
 #include "vmath.h"
@@ -122,6 +123,7 @@ GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
  */
 GLuint loadGLTexture(const char* filename);
 
+void GenerateSphere(float radius, float sectorCount, float stackCount);
 /* Windowing related variables */
 Display*     dpy         = nullptr; // connection to server
 Colormap     colormap    = 0UL;
@@ -178,10 +180,19 @@ GLuint textureSpecular;
 GLuint textureNormal;
 
 /* Functional uniforms */
-GLuint keyPressedUniform = 0;
-Bool   bLightingEnabled  = False;
-Bool   bAnimationEnabled = False;
+GLuint keyPressedUniform   = 0;
+Bool   bLightingEnabled    = False;
+Bool   bAnimationEnabled   = False;
+GLuint vao_sphere          = 0U;
+GLuint vbo_sphere_position = 0U;
+GLuint vbo_sphere_normal   = 0U;
+GLuint vbo_sphere_texcoord = 0U;
+GLuint vbo_sphere_indices  = 0U;
 
+std::vector<float> vertices;
+std::vector<float> normals;
+std::vector<float> texcoords;
+std::vector<int>   indices;
 /* Variables */
 Model model         = {0};
 float rotationAngle = 0.0f;
@@ -439,98 +450,66 @@ int initialize()
 
     /* Program related variables */
     const GLchar* vertexShaderSource =
-        "#version 460 core"
+        "#version 450 core"
         "\n"
         "in vec3 aPosition;"
         "in vec3 aNormal;"
         "in vec2 aTexCoord;"
-        "\n"
-        "out vec3 oTransformedNormals;"
-        "out vec3 oPosition;"
-        "out vec2 oTexCoord;"
-        "\n"
-        "uniform int  uKeyPressed;"
+
         "uniform mat4 uModelMatrix;"
         "uniform mat4 uViewMatrix;"
         "uniform mat4 uProjectionMatrix;"
-        "\n"
+
+        "out vec2 oTexCoord;"
+        "out vec3 oWorldPosition;"
+        "out vec3 out_normal;"
+
         "void main(void)"
         "{"
-        "    if (uKeyPressed == 1)"
-        "    {"
-        "       oPosition = aPosition;"
-        "       oTransformedNormals = mat3(uModelMatrix) * aPosition;"
-        "    }"
-        "    else"
-        "    {"
-        "        oTransformedNormals = vec3(0, 0, 0);"
-        "        oPosition = vec3(1, 1, 1);"
-        "    }"
-        "    gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0f);"
-        "    oTexCoord = aTexCoord;"
+        "   oTexCoord = aTexCoord;"
+        "   oWorldPosition = vec3(uModelMatrix * vec4(aPosition, 1.0f));"
+        "   out_normal = mat3(uModelMatrix) * aNormal;"
+
+        "   gl_Position = uProjectionMatrix * uViewMatrix * vec4(oWorldPosition, 1.0f);"
         "}";
 
     const GLchar* fragmentShaderSource =
-        "#version 460 core"
+        "#version 450 core"
         "\n"
-        "in vec3 oTransformedNormals;"
-        "in vec3 oPosition;"
         "in vec2 oTexCoord;"
-        "\n"
+        "in vec3 oWorldPosition;"
+        "in vec3 out_normal;"
+
+        "uniform sampler2D uSamplerNormal;"
+        "uniform sampler2D uSamplerDiffuse;"
+        "uniform vec3 lightPosition;"
+        "uniform vec3 lightColor;"
+        "uniform vec3 uCameraPosition;"
+
         "out vec4 FragColor;"
-        "\n"
-        "uniform int  uKeyPressed;"
-        "uniform vec3 uLightAmbient;"
-        "uniform vec3 uLightDiffused;"
-        "uniform vec3 uLightSpecular;"
-        "uniform vec3 uLightPosition;"
-        "uniform vec3 uViewPosition;"
-
-        "uniform vec3  uMaterialAmbient;"
-        "uniform vec3  uMaterialDiffused;"
-        "uniform vec3  uMaterialSpecular;"
-        "uniform float uMaterialShininess;"
-
-        "uniform sampler2D uDiffuseSampler;"
-        "uniform sampler2D uSpecularSampler;"
-        "uniform sampler2D uNormalSampler;"
+        "vec3 getNormalFromMap()"
+        "{"
+        "   vec3 tangentNormal = texture(uSamplerNormal, oTexCoord).xyz * 2.0f - 1.0f;"
+        "   vec3 Q1 = dFdx(oWorldPosition);"
+        "   vec3 Q2 = dFdy(oWorldPosition);"
+        "   vec2 st1 = dFdx(oTexCoord);"
+        "   vec2 st2 = dFdy(oTexCoord);"
+        "   vec3 N = normalize(out_normal);"
+        "   vec3 T = normalize(Q1 * st2.t - Q2 * st1.t);"
+        "   vec3 B = -normalize(cross(N, T));"
+        "   mat3 TBN = mat3(T, B, N);"
+        "   return (normalize(TBN * tangentNormal));"
+        "}"
 
         "void main(void)"
         "{"
-        "    vec3 phongADSLight;"
-        "    if (uKeyPressed == 1)"
-        "    {"
-        "        vec3 tangentNormal = normalize(texture(uNormalSampler, oTexCoord).rgb * 2.0f - 1.0f);"
-
-        "        vec3 Q1 = dFdx(oPosition);"
-        "        vec3 Q2 = dFdy(oPosition);"
-        "        vec2 st1 = dFdx(oTexCoord);"
-        "        vec2 st2 = dFdy(oTexCoord);"
-
-        "        vec3 N = normalize(oTransformedNormals);"
-        "        vec3 T = normalize(Q1 * st2.t - Q2 * st1.t);"
-        "        vec3 B = -normalize(cross(N, T));"
-        "        mat3 TBN = mat3(T, B, N);"
-
-        "        vec3 normal = normalize(TBN * tangentNormal);"
-        "        vec3 normalizedViewerVector = normalize(uViewPosition - oPosition);"
-        "        vec3 reflectionVector = reflect(-normalizedViewerVector, normal);"
-
-        "        vec3 color  = texture(uDiffuseSampler, oTexCoord).rgb;"
-        "        vec3 spec1  = texture(uSpecularSampler, oTexCoord).rrr;"
-        "        vec3 normalizedLightDirection     = normalize(uLightPosition - oPosition);"
-        "\n"
-        "        vec3 ambientLight  = uLightAmbient * uMaterialAmbient;"
-        "        vec3 diffuseLight  = uLightDiffused * color * uMaterialDiffused * max(dot(normalizedLightDirection, normal), 0.0);"
-        "        vec3 specularLight = uLightSpecular * spec1 * pow(max(dot(reflectionVector, normalizedViewerVector), 0.0), uMaterialShininess);"
-        "\n"
-        "        phongADSLight = ambientLight + diffuseLight + specularLight;"
-        "        FragColor = vec4(oPosition, 1.0);"
-        "    }"
-        "    else"
-        "    {"
-        "        FragColor = vec4(1);"
-        "    }"
+        "   vec3 normal = getNormalFromMap();"
+        "   vec3 diffuseColor = texture(uSamplerDiffuse, oTexCoord).xyz;"
+        "   vec3 lightDirection = normalize(lightPosition - oWorldPosition);"
+        "   float NdotL = max(dot(normal, lightDirection), 0.0f);"
+        "   vec3 color =  (lightColor) * NdotL ;"
+        "   vec3 finalColor = diffuseColor;"
+        "   FragColor = vec4(finalColor, 1.0f);"
         "}";
 
     shaderProgramObject = loadShaders(vertexShaderSource, fragmentShaderSource);
@@ -556,7 +535,7 @@ int initialize()
     modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "uModelMatrix");
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
-    viewPosUniform          = glGetUniformLocation(shaderProgramObject, "uViewPosition");
+    viewPosUniform          = glGetUniformLocation(shaderProgramObject, "uCameraPosition");
 
     lightAmbientUniform  = glGetUniformLocation(shaderProgramObject, "uLightAmbient");
     lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "uLightDiffused");
@@ -602,6 +581,45 @@ int initialize()
     glBindVertexArray(0U);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
+    // construct sphere data
+    GenerateSphere(1.0f, 50, 50);
+
+    // setup vao and vbo
+    glGenVertexArrays(1, &vao_sphere);
+    glBindVertexArray(vao_sphere);
+
+    glGenBuffers(1, &vbo_sphere_position);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_position);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glGenBuffers(1, &vbo_sphere_normal);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_normal);
+    glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(float), normals.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(AMC_ATTRIBUTE_NORMALS, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMALS);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glGenBuffers(1, &vbo_sphere_texcoord);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_texcoord);
+    glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_UVS, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_UVS);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glGenBuffers(1, &vbo_sphere_indices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_sphere_indices);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(float), indices.data(), GL_STATIC_DRAW);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
     textureDiffuse  = loadGLTexture("8k/day.jpg");
     textureSpecular = loadGLTexture("8k/specular.png");
     textureNormal   = loadGLTexture("8k/normal.png");
@@ -644,11 +662,11 @@ void display()
     vec3        cameaDirection    = vec3(0.0f, 0.0f, -1.0f);
 
     glUseProgram(shaderProgramObject);
-    glBindVertexArray(vao);
+    glBindVertexArray(vao_sphere);
     {
         viewMatrix = lookat(cameraPosition, cameaDirection, vec3(0.0f, 1.0f, 0.0f));
 
-        modelMatrix = translate(0.0f, 0.0f, -3.0f) * rotate(rotationAngle, 0.0f, 1.0f, 0.0f);
+        modelMatrix = translate(0.0f, 0.0f, -3.0f) * rotate(-90.0f, 1.0f, 0.0f, 0.0f) * rotate(rotationAngle, 0.0f, 0.0f, 1.0f);
 
         glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
@@ -686,7 +704,8 @@ void display()
         glBindTexture(GL_TEXTURE_2D, textureNormal);
         glUniform1i(normalTextureUniform, 2);
 
-        glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        // glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
     glBindVertexArray(0U);
@@ -932,7 +951,7 @@ GLuint loadGLTexture(const char* filename)
     GLenum         format    = GL_RGB;
     GLuint         texture   = 0U;
 
-    stbi_set_flip_vertically_on_load(true);
+    // stbi_set_flip_vertically_on_load(true);
 
     data = stbi_load(filename, &width, &height, &nChannels, 0);
     if (data == NULL)
@@ -972,4 +991,74 @@ GLuint loadGLTexture(const char* filename)
         fprintf(gpFile, "Texture loaded %s, nChannels %d\n", filename, nChannels);
     }
     return texture;
+}
+
+void GenerateSphere(float radius, float sectorCount, float stackCount)
+{
+    float x, y, z, xy;
+    float nx, ny, nz, lengthInv = 1.0f / radius;
+    float s, t;
+    int   t1, t2;
+
+    float sectorStep = 2.0f * M_PI / sectorCount;
+    float stackStep  = M_PI / stackCount;
+    float sectorAngle, stackAngle;
+
+    for (int i = 0; i <= stackCount; i++)
+    {
+        stackAngle = M_PI / 2.0f - i * stackStep;
+        xy         = radius * cosf(stackAngle);
+        z          = radius * sinf(stackAngle);
+
+        for (int j = 0; j <= sectorCount; j++)
+        {
+            sectorAngle = j * sectorStep;
+
+            x = xy * cosf(sectorAngle);
+            y = xy * sinf(sectorAngle);
+
+            vertices.push_back(x);
+            vertices.push_back(y);
+            vertices.push_back(z);
+
+            // normals
+            nx = x * lengthInv;
+            ny = y * lengthInv;
+            nz = z * lengthInv;
+
+            normals.push_back(nx);
+            normals.push_back(ny);
+            normals.push_back(nz);
+
+            // texcoords
+            s = (float)j / sectorCount;
+            t = (float)i / stackCount;
+
+            texcoords.push_back(s);
+            texcoords.push_back(t);
+        }
+    }
+
+    for (int i = 0; i < stackCount; i++)
+    {
+        t1 = i * (sectorCount + 1);
+        t2 = t1 + sectorCount + 1;
+
+        for (int j = 0; j < sectorCount; j++, t1++, t2++)
+        {
+            if (i != 0)
+            {
+                indices.push_back(t1);
+                indices.push_back(t2);
+                indices.push_back(t1 + 1);
+            }
+
+            if (i != (stackCount - 1))
+            {
+                indices.push_back(t1 + 1);
+                indices.push_back(t2);
+                indices.push_back(t2 + 1);
+            }
+        }
+    }
 }
