@@ -503,12 +503,13 @@ int initialize()
 
         "void main(void)"
         "{"
+        // "   vec3 normal = out_normal;" 
         "   vec3 normal = getNormalFromMap();"
         "   vec3 diffuseColor = texture(uSamplerDiffuse, oTexCoord).xyz;"
         "   vec3 lightDirection = normalize(lightPosition - oWorldPosition);"
         "   float NdotL = max(dot(normal, lightDirection), 0.0f);"
         "   vec3 color =  (lightColor) * NdotL ;"
-        "   vec3 finalColor = diffuseColor;"
+        "   vec3 finalColor = diffuseColor * NdotL;"
         "   FragColor = vec4(finalColor, 1.0f);"
         "}";
 
@@ -538,9 +539,9 @@ int initialize()
     viewPosUniform          = glGetUniformLocation(shaderProgramObject, "uCameraPosition");
 
     lightAmbientUniform  = glGetUniformLocation(shaderProgramObject, "uLightAmbient");
-    lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "uLightDiffused");
+    lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "lightColor");
     lightSpecularUniform = glGetUniformLocation(shaderProgramObject, "uLightSpecular");
-    lightPositionUniform = glGetUniformLocation(shaderProgramObject, "uLightPosition");
+    lightPositionUniform = glGetUniformLocation(shaderProgramObject, "lightPosition");
 
     materialAmbientUniform   = glGetUniformLocation(shaderProgramObject, "uMaterialAmbient");
     materialDiffusedUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialDiffused");
@@ -622,7 +623,7 @@ int initialize()
 
     textureDiffuse  = loadGLTexture("8k/day.jpg");
     textureSpecular = loadGLTexture("8k/specular.png");
-    textureNormal   = loadGLTexture("8k/normal.png");
+    textureNormal   = loadGLTexture("2k/normal.png");
 
     /* Enabling Depth */
     glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
@@ -662,23 +663,25 @@ void display()
     vec3        cameaDirection    = vec3(0.0f, 0.0f, -1.0f);
 
     glUseProgram(shaderProgramObject);
-    glBindVertexArray(vao_sphere);
+    glBindVertexArray(vao);
     {
         viewMatrix = lookat(cameraPosition, cameaDirection, vec3(0.0f, 1.0f, 0.0f));
 
-        modelMatrix = translate(0.0f, 0.0f, -3.0f) * rotate(-90.0f, 1.0f, 0.0f, 0.0f) * rotate(rotationAngle, 0.0f, 0.0f, 1.0f);
+        modelMatrix = translate(0.0f, 0.0f, -3.0f) * rotate(rotationAngle, 0.0f, 1.0f, 0.0f);
+        modelMatrix = translate(0.0f, 0.0f, -3.0f);
 
         glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
         glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, projectionMatrix);
 
-        if (bLightingEnabled == true)
-        {
+            lightPosition[0] = 10.0f * cosf(rotationAngle);
+            lightPosition[1] = 0.0f;
+            lightPosition[2] = 10.0f * sinf(rotationAngle);
+        glUniform3fv(lightPositionUniform, 1, lightPosition);
             glUniform1i(keyPressedUniform, 1);
             glUniform3fv(lightAmbientUniform, 1, lightAmbient);
             glUniform3fv(lightDiffuseUniform, 1, lightDiffused);
             glUniform3fv(lightSpecularUniform, 1, lightSpecular);
-            glUniform4fv(lightPositionUniform, 1, lightPosition);
 
             glUniform3fv(materialAmbientUniform, 1, materialAmbient);
             glUniform3fv(materialDiffusedUniform, 1, materialDiffused);
@@ -686,11 +689,6 @@ void display()
             glUniform1f(materialShininessUniform, materialShinyness);
 
             glUniform3fv(viewPosUniform, 1, cameraPosition);
-        }
-        else
-        {
-            glUniform1i(keyPressedUniform, 0);
-        }
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureDiffuse);
@@ -704,8 +702,8 @@ void display()
         glBindTexture(GL_TEXTURE_2D, textureNormal);
         glUniform1i(normalTextureUniform, 2);
 
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-        // glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
+        // glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
     glBindVertexArray(0U);
@@ -713,7 +711,7 @@ void display()
 
 void update()
 {
-    rotationAngle += 0.5;
+    rotationAngle += 0.01;
     if (360.0f < rotationAngle)
     {
         rotationAngle -= 360.0f;
@@ -951,7 +949,7 @@ GLuint loadGLTexture(const char* filename)
     GLenum         format    = GL_RGB;
     GLuint         texture   = 0U;
 
-    // stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(true);
 
     data = stbi_load(filename, &width, &height, &nChannels, 0);
     if (data == NULL)
