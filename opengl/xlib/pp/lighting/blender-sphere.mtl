@@ -1,0 +1,12 @@
+# Blender 4.1.0 MTL File: 'None'
+# www.blender.org
+
+newmtl Material.001
+Ns 402.071259
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd earthmap1k.jpg
+map_Ks earthspec1k.jpg
