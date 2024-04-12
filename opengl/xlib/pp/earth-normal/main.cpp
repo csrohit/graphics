@@ -441,38 +441,32 @@ int initialize()
     const GLchar* vertexShaderSource =
         "#version 460 core"
         "\n"
-        "in vec4 aPosition;"
+        "in vec3 aPosition;"
         "in vec3 aNormal;"
         "in vec2 aTexCoord;"
         "\n"
         "out vec3 oTransformedNormals;"
-        "out vec3 oLightDirection;"
-        "out vec3 oViewerVector;"
+        "out vec3 oPosition;"
         "out vec2 oTexCoord;"
         "\n"
         "uniform int  uKeyPressed;"
         "uniform mat4 uModelMatrix;"
         "uniform mat4 uViewMatrix;"
         "uniform mat4 uProjectionMatrix;"
-        "uniform vec3 uViewPosition;"
-        "uniform vec4 uLightPosition;"
         "\n"
         "void main(void)"
         "{"
         "    if (uKeyPressed == 1)"
         "    {"
-        "        vec4 eyeCoords      = uViewMatrix * uModelMatrix * aPosition;"
-        "        oTransformedNormals = mat3(uViewMatrix * uModelMatrix) * aNormal;"
-        "        oLightDirection     = vec3(uLightPosition - eyeCoords);"
-        "        oViewerVector       = -eyeCoords.xyz;"
+        "       oPosition = aPosition;"
+        "       oTransformedNormals = mat3(uModelMatrix) * aPosition;"
         "    }"
         "    else"
         "    {"
         "        oTransformedNormals = vec3(0, 0, 0);"
-        "        oLightDirection     = vec3(0, 0, 0);"
-        "        oViewerVector       =  vec3(0, 0, 0);"
+        "        oPosition = vec3(1, 1, 1);"
         "    }"
-        "    gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * aPosition;"
+        "    gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0f);"
         "    oTexCoord = aTexCoord;"
         "}";
 
@@ -480,42 +474,58 @@ int initialize()
         "#version 460 core"
         "\n"
         "in vec3 oTransformedNormals;"
-        "in vec3 oLightDirection;"
-        "in vec3 oViewerVector;"
+        "in vec3 oPosition;"
         "in vec2 oTexCoord;"
         "\n"
         "out vec4 FragColor;"
         "\n"
-        "uniform int   uKeyPressed;"
-        "uniform vec3  uLightAmbient;"
-        "uniform vec3  uLightDiffused;"
-        "uniform vec3  uLightSpecular;"
+        "uniform int  uKeyPressed;"
+        "uniform vec3 uLightAmbient;"
+        "uniform vec3 uLightDiffused;"
+        "uniform vec3 uLightSpecular;"
+        "uniform vec3 uLightPosition;"
+        "uniform vec3 uViewPosition;"
 
         "uniform vec3  uMaterialAmbient;"
         "uniform vec3  uMaterialDiffused;"
         "uniform vec3  uMaterialSpecular;"
         "uniform float uMaterialShininess;"
+
         "uniform sampler2D uDiffuseSampler;"
         "uniform sampler2D uSpecularSampler;"
+        "uniform sampler2D uNormalSampler;"
 
         "void main(void)"
         "{"
         "    vec3 phongADSLight;"
         "    if (uKeyPressed == 1)"
         "    {"
-        "        vec3 normalizedTransformedNormals = normalize(oTransformedNormals);"
+        "        vec3 tangentNormal = normalize(texture(uNormalSampler, oTexCoord).rgb * 2.0f - 1.0f);"
+
+        "        vec3 Q1 = dFdx(oPosition);"
+        "        vec3 Q2 = dFdy(oPosition);"
+        "        vec2 st1 = dFdx(oTexCoord);"
+        "        vec2 st2 = dFdy(oTexCoord);"
+
+        "        vec3 N = normalize(oTransformedNormals);"
+        "        vec3 T = normalize(Q1 * st2.t - Q2 * st1.t);"
+        "        vec3 B = -normalize(cross(N, T));"
+        "        mat3 TBN = mat3(T, B, N);"
+
+        "        vec3 normal = normalize(TBN * tangentNormal);"
+        "        vec3 normalizedViewerVector = normalize(uViewPosition - oPosition);"
+        "        vec3 reflectionVector = reflect(-normalizedViewerVector, normal);"
+
         "        vec3 color  = texture(uDiffuseSampler, oTexCoord).rgb;"
         "        vec3 spec1  = texture(uSpecularSampler, oTexCoord).rrr;"
-        "        vec3 normalizedLightDirection     = normalize(oLightDirection);"
-        "        vec3 normalizedViewerVector       = normalize(oViewerVector);"
-        "        vec3 reflectionVector             = reflect(-normalizedLightDirection, normalizedTransformedNormals);"
+        "        vec3 normalizedLightDirection     = normalize(uLightPosition - oPosition);"
         "\n"
         "        vec3 ambientLight  = uLightAmbient * uMaterialAmbient;"
-        "        vec3 diffuseLight  = uLightDiffused * color * uMaterialDiffused * max(dot(normalizedLightDirection, normalizedTransformedNormals), 0.0);"
+        "        vec3 diffuseLight  = uLightDiffused * color * uMaterialDiffused * max(dot(normalizedLightDirection, normal), 0.0);"
         "        vec3 specularLight = uLightSpecular * spec1 * pow(max(dot(reflectionVector, normalizedViewerVector), 0.0), uMaterialShininess);"
         "\n"
         "        phongADSLight = ambientLight + diffuseLight + specularLight;"
-        "        FragColor = vec4(phongADSLight, 1.0);"
+        "        FragColor = vec4(oPosition, 1.0);"
         "    }"
         "    else"
         "    {"
@@ -594,6 +604,7 @@ int initialize()
 
     textureDiffuse  = loadGLTexture("8k/day.jpg");
     textureSpecular = loadGLTexture("8k/specular.png");
+    textureNormal   = loadGLTexture("8k/normal.png");
 
     /* Enabling Depth */
     glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
@@ -629,7 +640,7 @@ void display()
     vmath::mat4 translationMatrix = vmath::mat4::identity();
     vmath::mat4 scaleMatrix       = vmath::mat4::identity();
     vmath::mat4 viewMatrix        = vmath::mat4::identity();
-    vec3        cameraPosition    = vec3(0.0f, 0.0f, 3.0f);
+    vec3        cameraPosition    = vec3(0.0f, 0.0f, 0.0f);
     vec3        cameaDirection    = vec3(0.0f, 0.0f, -1.0f);
 
     glUseProgram(shaderProgramObject);
@@ -637,7 +648,7 @@ void display()
     {
         viewMatrix = lookat(cameraPosition, cameaDirection, vec3(0.0f, 1.0f, 0.0f));
 
-        modelMatrix = rotate(rotationAngle, 0.0f, 1.0f, 0.0f);
+        modelMatrix = translate(0.0f, 0.0f, -3.0f) * rotate(rotationAngle, 0.0f, 1.0f, 0.0f);
 
         glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
@@ -655,6 +666,8 @@ void display()
             glUniform3fv(materialDiffusedUniform, 1, materialDiffused);
             glUniform3fv(materialSpecularUniform, 1, materialSpecular);
             glUniform1f(materialShininessUniform, materialShinyness);
+
+            glUniform3fv(viewPosUniform, 1, cameraPosition);
         }
         else
         {
@@ -668,6 +681,10 @@ void display()
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, textureSpecular);
         glUniform1i(specularTextureUniform, 1);
+
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, textureNormal);
+        glUniform1i(normalTextureUniform, 2);
 
         glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
@@ -775,6 +792,12 @@ void uninitialize()
         textureSpecular = 0U;
     }
 
+    if (0U != textureNormal)
+    {
+        glDeleteTextures(1, &textureNormal);
+        textureNormal = 0U;
+    }
+
     if (0U != vao)
     {
         glDeleteVertexArrays(1, &vao);
@@ -835,12 +858,14 @@ GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShade
         }
         else
         {
+            fprintf(gpFile, "Fragment shader compilation failed\n");
             glDeleteShader(vertexShaderId);
             glDeleteShader(fragmentShaderId);
         }
     }
     else
     {
+        fprintf(gpFile, "Vertex shader compilation failed\n");
         glDeleteShader(vertexShaderId);
     }
     return programId;
@@ -863,7 +888,7 @@ GLint compileShader(unsigned int shaderId, const char* shaderSourceCode)
             if (nullptr != szInfoLog)
             {
                 glGetShaderInfoLog(shaderId, infoLogLength, nullptr, szInfoLog);
-                fprintf(gpFile, "Vertex Shader compilation error log: %s\n", szInfoLog);
+                fprintf(gpFile, "Shader compilation error log: %s\n", szInfoLog);
                 free(szInfoLog);
                 szInfoLog = nullptr;
             }
