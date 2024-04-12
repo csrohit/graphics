@@ -140,7 +140,7 @@ GLuint vao         = 0U;
 GLuint vboPosition = 0U;
 GLuint eboSpheres  = 0U;
 
-/* MAtrix uniforms */
+/* Matrix uniforms */
 GLuint modelMatrixUniform = 0U;
 GLuint viewMatrixUniform  = 0U;
 
