@@ -1,8 +1,8 @@
 /**
  * @file    main.cpp
- * @brief   Model loading
+ * @brief   Sphere with Normal visualization
  * @author  Rohit Nimkar
- * @date    2024-03-10
+ * @date    2024-04-10
  * @version 1.1
  */
 
@@ -30,9 +30,10 @@
 #include "vmath.h"
 using namespace vmath;
 
-#include "load.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#include "load.h"
 
 /*--- Macro definitions ---*/
 #define gpFILE     stdout
@@ -48,11 +49,39 @@ enum
 };
 
 /*--- Function declarations ---*/
+/**
+ * @brief initilize OpenGL context
+ *
+ * @return
+ */
+int initialize(void);
+
+/**
+ * @brief UnInitialize OpenGL context
+ */
 void uninitialize(void);
+
+/**
+ * @brief toggle  full screen
+ */
 void toggleFullscreen(void);
-int  initialize(void);
-void resize(int, int);
+
+/**
+ * @brief Resize window
+ *
+ * @param width  [in] - requested width
+ * @param height [in] - Requested height
+ */
+void resize(int width, int height);
+
+/**
+ * @brief Display contexts on screen
+ */
 void display(void);
+
+/**
+ * @brief Update contents on screen
+ */
 void update(void);
 
 /**
@@ -87,14 +116,11 @@ GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
 /**
  * @brief Load texture into memory
  *
- * @param texture  [out] - pointer to texture id
  * @param filename [in]  - file name
  *
  * @returns texture id
  */
-void loadGLTexture(GLuint* texture, const char* filename);
-
-GLint linkProgram(GLuint program);
+GLuint loadGLTexture(const char* filename);
 
 /* Windowing related variables */
 Display*     dpy         = nullptr; // connection to server
@@ -105,56 +131,30 @@ bool         gbAbortFlag = false;   // Global abort flag
 GLXContext   glxContext  = nullptr; // handle to OpenGL context
 GLboolean    shouldDraw  = false;
 FILE*        gpFile      = stdout;
+Bool         bFullscreen = False;
 
-Bool   bFullscreen         = False;
-GLuint shaderProgramObject = 0U;
 /* OpenGL identifiers */
+GLuint shaderProgramObject = 0U;
+
 GLuint vao         = 0U;
 GLuint vboPosition = 0U;
-GLuint vboNormal   = 0U;
 GLuint eboSpheres  = 0U;
 
-/* MAtrix uniforms */
-GLuint modelMatrixUniform      = 0U;
-GLuint viewMatrixUniform       = 0U;
+/* Matrix uniforms */
+GLuint modelMatrixUniform = 0U;
+GLuint viewMatrixUniform  = 0U;
+
 GLuint projectionMatrixUniform = 0U;
+mat4   projectionMatrix        = {};
 
-/* Light uniforms */
-GLuint lightAmbientUniform  = 0;
-GLuint lightDiffuseUniform  = 0;
-GLuint lightSpecularUniform = 0;
-GLuint lightPositionUniform = 0;
+/* Functional uniforms */
+GLuint keyPressedUniform = 0;
+Bool   bLightingEnabled  = False;
+Bool   bAnimationEnabled = False;
 
-/* Material uniforms */
-GLuint materialAmbientUniform   = 0;
-GLuint materialSpecularUniform  = 0;
-GLuint materialDiffusedUniform  = 0;
-GLuint materialShininessUniform = 0;
-GLuint keyPressedUniform        = 0;
-
-// boolean for lighting
-Bool bLightingEnabled  = False;
-Bool bAnimationEnabled = False;
-
-GLfloat lightAmbient[]  = {0.1f, 0.1f, 0.1f, 1.0f};       // grey ambient light
-GLfloat lightDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f};       // white diffused light
-GLfloat lightSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f};       // specular color
-GLfloat lightPosition[] = {100.0f, 100.0f, 100.0f, 1.0f}; // position of light
-
-GLfloat materialAmbient[]  = {0.2f, 0.2f, 0.2f, 0.2f}; // ambient reflectance
-GLfloat materialDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f}; // diffuse reflectance
-GLfloat materialSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f}; // specular reflectance
-GLfloat materialShinyness  = 128.0f;                   // concentration of specular component
-
-GLuint diffuseTextureUniform;
-GLuint specularTextureUniform;
-GLuint textureFloor;
-GLuint textureSpecular;
-Model  model = {0};
-
-vmath::mat4 projectionMatrix = {};
-uint32_t    count            = 1U;
-float       rotationAngle    = 0.0f;
+/* Variables */
+Model model         = {0};
+float rotationAngle = 0.0f;
 
 int main()
 {
@@ -344,19 +344,6 @@ int main()
                             }
                             break;
                         }
-                        case 's':
-                        {
-                            count++;
-                            break;
-                        }
-                        case 'S':
-                        {
-                            if (count > 1)
-                            {
-                                count--;
-                            }
-                            break;
-                        }
 
                         default: break;
                     }
@@ -378,8 +365,12 @@ int main()
         if (!shouldDraw)
             continue;
 
-        update();
         display();
+
+        if (True == bAnimationEnabled)
+        {
+            update();
+        }
 
         glXSwapBuffers(dpy, window);
     }
@@ -422,84 +413,30 @@ int initialize()
         "#version 460 core"
         "\n"
         "in vec4 aPosition;"
-        "in vec3 aNormal;"
-        "in vec2 aTexCoord;"
-        "\n"
-        "out vec3 oTransformedNormals;"
-        "out vec3 oLightDirection;"
-        "out vec3 oViewerVector;"
-        "out vec2 oTexCoord;"
+        "out vec3 oPosition;"
         "\n"
         "uniform int   uKeyPressed;"
         "uniform mat4  uModelMatrix;"
         "uniform mat4  uViewMatrix;"
         "uniform mat4  uProjectionMatrix;"
-        "uniform vec4  uLightPosition;"
         "\n"
         "void main(void)"
         "{"
-        "    if (uKeyPressed == 1)"
-        "    {"
-        "        vec4 eyeCoords      = uViewMatrix * uModelMatrix * aPosition;"
-        "        oTransformedNormals = mat3(uViewMatrix * uModelMatrix) * aNormal;"
-        "        oLightDirection     = vec3(uLightPosition - eyeCoords);"
-        "        oViewerVector       = -eyeCoords.xyz;"
-        "    }"
-        "    else"
-        "    {"
-        "        oTransformedNormals = vec3(0, 0, 0);"
-        "        oLightDirection     = vec3(0, 0, 0);"
-        "        oViewerVector       =  vec3(0, 0, 0);"
-        "    }"
         "    gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * aPosition;"
-        "    oTexCoord = aTexCoord;"
+        "    oPosition = aPosition.xyz;"
         "}";
 
     const GLchar* fragmentShaderSource =
         "#version 460 core"
         "\n"
-        "in vec3 oTransformedNormals;"
-        "in vec3 oLightDirection;"
-        "in vec3 oViewerVector;"
-        "in vec2 oTexCoord;"
+        "in vec3 oPosition;"
         "\n"
         "out vec4 FragColor;"
         "\n"
-        "uniform int   uKeyPressed;"
-        "uniform vec3  uLightAmbient;"
-        "uniform vec3  uLightDiffused;"
-        "uniform vec3  uLightSpecular;"
-
-        "uniform vec3  uMaterialAmbient;"
-        "uniform vec3  uMaterialDiffused;"
-        "uniform vec3  uMaterialSpecular;"
-        "uniform float uMaterialShininess;"
-        "uniform sampler2D uDiffuseSampler;"
-        "uniform sampler2D uSpecularSampler;"
-
         "void main(void)"
         "{"
-        "    vec3 phongADSLight;"
-        "    if (uKeyPressed == 1)"
-        "    {"
-        "        vec3 normalizedTransformedNormals = normalize(oTransformedNormals);"
-        "        vec3 color  = texture(uDiffuseSampler, oTexCoord).rgb;"
-        "        vec3 spec1  = texture(uSpecularSampler, oTexCoord).rgb;"
-        "        vec3 normalizedLightDirection     = normalize(oLightDirection);"
-        "        vec3 normalizedViewerVector       = normalize(oViewerVector);"
-        "        vec3 reflectionVector             = reflect(-normalizedLightDirection, normalizedTransformedNormals);"
-        "\n"
-        "        vec3 ambientLight  = uLightAmbient * uMaterialAmbient;"
-        "        vec3 diffuseLight  = uLightDiffused * color * uMaterialDiffused * max(dot(normalizedLightDirection, normalizedTransformedNormals), 0.0);"
-        "        vec3 specularLight = uLightSpecular * spec1 * pow(max(dot(reflectionVector, normalizedViewerVector), 0.0), uMaterialShininess);"
-        "\n"
-        "        phongADSLight = ambientLight + diffuseLight + specularLight;"
-        "        FragColor = vec4(phongADSLight, 1.0);"
-        "    }"
-        "    else"
-        "    {"
-        "    }"
-        "        FragColor = texture(uDiffuseSampler, oTexCoord);"
+        "        vec3 normal_col = normalize(oPosition) * 0.5 + 0.5;"
+        "        FragColor = vec4(normal_col, 1.0);"
         "}";
 
     shaderProgramObject = loadShaders(vertexShaderSource, fragmentShaderSource);
@@ -526,26 +463,8 @@ int initialize()
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
 
-    lightAmbientUniform  = glGetUniformLocation(shaderProgramObject, "uLightAmbient");
-    lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "uLightDiffused");
-    lightSpecularUniform = glGetUniformLocation(shaderProgramObject, "uLightSpecular");
-    lightPositionUniform = glGetUniformLocation(shaderProgramObject, "uLightPosition");
-
-    materialAmbientUniform   = glGetUniformLocation(shaderProgramObject, "uMaterialAmbient");
-    materialDiffusedUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialDiffused");
-    materialSpecularUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialSpecular");
-    materialShininessUniform = glGetUniformLocation(shaderProgramObject, "uMaterialShininess");
-    diffuseTextureUniform    = glGetUniformLocation(shaderProgramObject, "uDiffuseSampler");
-    specularTextureUniform   = glGetUniformLocation(shaderProgramObject, "uSpecularSampler");
-
-    keyPressedUniform = glGetUniformLocation(shaderProgramObject, "uKeyPressed");
-
-    const GLfloat uvs[] = 
-    {
-        -1.0f, -1.0f,
-        1.0f, -1.0f,
-        -1.0f, 1.0f,
-        1.0f, 1.0f,
+    const GLfloat uvs[] = {
+        -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
     };
 
     /* Cube */
@@ -554,26 +473,10 @@ int initialize()
 
     glGenBuffers(1, &vboPosition);
     glBindBuffer(GL_ARRAY_BUFFER, vboPosition);
-    // glBufferData(GL_ARRAY_BUFFER, sizeof(positions), positions, GL_STATIC_DRAW);
-    // glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * model.header.nVertices, model.pVertices, GL_STATIC_DRAW);
     glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
     glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
-    // glBindBuffer(GL_ARRAY_BUFFER, 0U);
 
-    glVertexAttribPointer(AMC_ATTRIBUTE_NORMALS, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-    // glGenBuffers(1, &vboNormal);
-    // glBindBuffer(GL_ARRAY_BUFFER, vboNormal);
-    // glBufferData(GL_ARRAY_BUFFER, sizeof(normals), normals, GL_STATIC_DRAW);
-    // glVertexAttribPointer(AMC_ATTRIBUTE_NORMALS, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMALS);
-
-    // glVertexAttribPointer(AMC_ATTRIBUTE_UVS, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texel));
-    glGenBuffers(1, &vboNormal);
-    glBindBuffer(GL_ARRAY_BUFFER, vboNormal);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(uvs), uvs, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_UVS, 2, GL_FLOAT, GL_FALSE, 0, (void *)0);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_UVS);
     glBindBuffer(GL_ARRAY_BUFFER, 0U);
 
     glGenBuffers(1, &eboSpheres);
@@ -588,15 +491,13 @@ int initialize()
     glBindVertexArray(0U);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    loadGLTexture(&textureFloor, "earthmap1k.jpg");
-    loadGLTexture(&textureSpecular, "earthspec1k.jpg");
     /* Enabling Depth */
     glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
     glEnable(GL_DEPTH_TEST); //[Compulsory] enable depth test
     glDepthFunc(GL_LEQUAL);  //[Compulsory] Which function to use for testing
 
-    // glEnable(GL_CULL_FACE);
-    // glCullFace(GL_BACK);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
     glShadeModel(GL_SMOOTH);
 
     /* warm-up resize */
@@ -631,37 +532,11 @@ void display()
     glBindVertexArray(vao);
     translationMatrix = vmath::translate(0.0f, 0.0f, -5.0f);
 
-    modelMatrix = translationMatrix *rotate(rotationAngle, 0.0f, 1.0f, 0.0f) ;
+    modelMatrix = translationMatrix * rotate(rotationAngle, 0.0f, 1.0f, 0.0f);
 
     glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
     glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
     glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, projectionMatrix);
-
-    if (bLightingEnabled == true)
-    {
-        glUniform1i(keyPressedUniform, 1);
-        glUniform3fv(lightAmbientUniform, 1, lightAmbient);
-        glUniform3fv(lightDiffuseUniform, 1, lightDiffused);
-        glUniform3fv(lightSpecularUniform, 1, lightSpecular);
-        glUniform4fv(lightPositionUniform, 1, lightPosition);
-
-        glUniform3fv(materialAmbientUniform, 1, materialAmbient);
-        glUniform3fv(materialDiffusedUniform, 1, materialDiffused);
-        glUniform3fv(materialSpecularUniform, 1, materialSpecular);
-        glUniform1f(materialShininessUniform, materialShinyness);
-    }
-    else
-    {
-        glUniform1i(keyPressedUniform, 0);
-    }
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textureFloor);
-    glUniform1i(diffuseTextureUniform, 0);
-
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, textureSpecular);
-    glUniform1i(specularTextureUniform, 1);
 
     glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
 
@@ -753,12 +628,6 @@ void uninitialize()
     {
         glDeleteBuffers(1, &eboSpheres);
         eboSpheres = 0U;
-    }
-
-    if (0U != vboNormal)
-    {
-        glDeleteBuffers(1, &vboNormal);
-        vboNormal = 0U;
     }
 
     if (0U != vao)
