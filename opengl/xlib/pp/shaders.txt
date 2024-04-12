@@ -1,0 +1,99 @@
+
+    // shader source code
+    const GLchar *vertexShaderSourceCode =
+        "#version 450 core"
+        "\n"
+        "in vec3 aPosition;"
+        "in vec3 aNormal;"
+        "in vec2 aTexCoords;"
+
+        "uniform mat4 modelMatrix;"
+        "uniform mat4 viewMatrix;"
+        "uniform mat4 projectionMatrix;"
+
+        "out vec2 oTexCoord;"
+        "out vec3 oWorldPosition;"
+        "out vec3 out_normal;"
+
+        "void main(void)"
+        "{"
+        "   oTexCoord = aTexCoords;"
+        "   oWorldPosition = vec3(modelMatrix * vec4(aPosition, 1.0f));"
+        "   out_normal = mat3(modelMatrix) * aNormal;"
+
+        "   gl_Position = projectionMatrix * viewMatrix * vec4(oWorldPosition, 1.0f);"
+        "}";
+
+    // provide source code to shader object
+    glShaderSource(vertexShaderObject, 1, (const GLchar **)&vertexShaderSourceCode, NULL);
+
+    // compile shader
+    glCompileShader(vertexShaderObject);
+
+    // shader compilation error checking
+    GLint infoLogLength = 0;
+    GLint shaderCompiledStatus = 0;
+    GLchar *szInfoLog = NULL;
+
+    glGetShaderiv(vertexShaderObject, GL_COMPILE_STATUS, &shaderCompiledStatus);
+    if (shaderCompiledStatus == GL_FALSE)
+    {
+        glGetShaderiv(vertexShaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
+        if (infoLogLength > 0)
+        {
+            szInfoLog = (GLchar *)malloc(sizeof(GLchar) * infoLogLength);
+            if (szInfoLog != NULL)
+            {
+                GLsizei written;
+                glGetShaderInfoLog(vertexShaderObject, infoLogLength, &written, szInfoLog);
+                fprintf(gpFile, "Vertex Shader Compilation Log : %s\n", szInfoLog);
+                free(szInfoLog);
+                DestroyWindow(ghwnd);
+            }
+        }
+    }
+
+    fprintf(gpFile, "\n----- Vertex Shader Compiled Successfully -----\n");
+
+    //--- Fragment Shader ---
+
+    // create shader
+    fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
+
+    // shader source code
+    const GLchar *fragmentShaderSourceCode =
+        "#version 450 core"
+        "\n"
+        "in vec2 oTexCoord;"
+        "in vec3 oWorldPosition;"
+        "in vec3 out_normal;"
+
+        "uniform sampler2D uSamplerNormal;"
+        "uniform sampler2D uSamplerDiffuse;"
+        "uniform vec3 lightPosition;"
+        "uniform vec3 lightColor;"
+        "uniform vec3 cameraPosition;"
+
+        "out vec4 FragColor;"
+        "vec3 getNormalFromMap()"
+        "{"
+        "   vec3 tangentNormal = texture(uSamplerNormal, oTexCoord).xyz * 2.0f - 1.0f;"
+        "   vec3 Q1 = dFdx(oWorldPosition);"
+        "   vec3 Q2 = dFdy(oWorldPosition);"
+        "   vec2 st1 = dFdx(oTexCoord);"
+        "   vec2 st2 = dFdy(oTexCoord);"
+        "   vec3 N = normalize(out_normal);"
+        "   vec3 T = normalize(Q1 * st2.t - Q2 * st1.t);"
+        "   vec3 B = -normalize(cross(N, T));"
+        "   mat3 TBN = mat3(T, B, N);"
+        "   return (normalize(TBN * tangentNormal));"
+        "}"
+
+        "void main(void)"
+        "{"
+        "   vec3 N = getNormalFromMap();"
+        "   vec3 L = normalize(lightPosition - oWorldPosition);"
+        "   float NdotL = max(dot(N, L), 0.0f);"
+        "   vec3 color =  (lightColor + texture(uSamplerDiffuse, oTexCoord).xyz) * NdotL ;"
+        "   FragColor = vec4(color, 1.0f);"
+        "}";
