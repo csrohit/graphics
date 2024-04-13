@@ -1,11 +1,12 @@
-# Blender MTL File: 'Rock1.blend'
-# Material Count: 1
+# Blender 4.1.0 MTL File: 'None'
+# www.blender.org
 
-newmtl Material
-Ns 13.725490
-Ka 0.000000 0.000000 0.000000
+newmtl Material.001
+Ns 13.725493
+Ka 1.000000 1.000000 1.000000
 Kd 0.640000 0.640000 0.640000
 Ks 0.007937 0.007937 0.007937
+Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
