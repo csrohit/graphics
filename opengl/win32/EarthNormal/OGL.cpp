@@ -694,7 +694,7 @@ int initialize(void)
     projectionMatrix = mat4::identity();
 
     /* Load Textures */
-    textureDiffuse = loadGLTexture("textures/night.jpg");
+    textureDiffuse = loadGLTexture("textures/day.jpg");
     if (0U == textureDiffuse)
     {
         fprintf(gpFile, "Failed to load diffuse texture\n");

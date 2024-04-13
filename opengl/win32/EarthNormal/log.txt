@@ -250,9 +250,10 @@ GL_SUN_multi_draw_arrays
 GL_WIN_swap_hint
 WGL_EXT_swap_control
 ----- Shader Program Linked Successfully -----
-Texture loaded textures/night.jpg, nChannels 3
+Texture loaded textures/day.jpg, nChannels 3
 Texture loaded textures/normal.png, nChannels 3
 Texture loaded textures/specular.png, nChannels 1
 Texture loaded textures/clouds.jpg, nChannels 3
+F/f key pressed and entered into full screen successfully!!!!
 
 ----- Program Completed Successfully -----
