@@ -723,6 +723,8 @@ int initialize(void)
     }
 
     resize(WIN_WIDTH, WIN_HEIGHT);
+
+    return 0;
 }
 
 void resize(int width, int height)
