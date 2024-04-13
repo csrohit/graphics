@@ -1,6 +1,6 @@
 /**
  * @file    main.cpp
- * @brief   Model loading
+ * @brief   Model Texturing
  * @author  Rohit Nimkar
  * @date    2024-04-10
  * @version 1.1
@@ -187,6 +187,11 @@ GLfloat materialDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f}; // diffuse reflectance
 GLfloat materialSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f}; // specular reflectance
 GLfloat materialShinyness  = 128.0f;                   // concentration of specular component
 
+/* Texture uniforms */
+GLuint diffuseSamplerUniform = 0U;
+
+GLuint textureDiffuse = 0U;
+
 /* Toggle uniforms */
 GLuint keyPressedUniform = 0;
 BOOL   bLightingEnabled  = FALSE;
@@ -257,7 +262,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     hwnd = CreateWindowEx(
         WS_EX_APPWINDOW,                                                      // extended window style
         szAppName,                                                            // window class name
-        TEXT("Model Loading Template: Rohit Nimkar"),                               // caption
+        TEXT("Model texturing: Rohit Nimkar"),                               // caption
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE, // window styles
         x,                                                                    // x co-ordinate of windows top-left corner
         y,                                                                    // y co-ordinate of windows top-left corner
@@ -537,6 +542,7 @@ int initialize(void)
         "out vec3 oTransformedNormals;"
         "out vec3 oLightDirection;"
         "out vec3 oViewerVector;"
+        "out vec2 oTexCoord;"
         "\n"
         "uniform int   uKeyPressed;"
         "uniform mat4  uModelMatrix;"
@@ -560,6 +566,7 @@ int initialize(void)
         "        oViewerVector       = vec3(0, 0, 0);"
         "    }"
         "    gl_Position = uProjectionMatrix * eyeCoords;"
+        "    oTexCoord = aTexCoord;"
         "}";
 
     const GLchar* fragmentShaderSourceCode =
@@ -568,6 +575,7 @@ int initialize(void)
         "in vec3 oTransformedNormals;"
         "in vec3 oLightDirection;"
         "in vec3 oViewerVector;"
+        "in vec2 oTexCoord;"
         "\n"
         "out vec4 FragColor;"
         "\n"
@@ -581,9 +589,12 @@ int initialize(void)
         "uniform vec3  uMaterialSpecular;"
         "uniform float uMaterialShininess;"
 
+        "uniform sampler2D uDiffuseSampler;"
+
         "void main(void)"
         "{"
         "    vec3 phongADSLight;"
+        "    vec4 color = texture(uDiffuseSampler, oTexCoord);"
         "    if (uKeyPressed == 1)"
         "    {"
         "        vec3 normalizedTransformedNormals = normalize(oTransformedNormals);"
@@ -592,16 +603,13 @@ int initialize(void)
         "        vec3 reflectionVector             = reflect(-normalizedLightDirection, normalizedTransformedNormals);"
         "\n"
         "        vec3 ambientLight  = uLightAmbient * uMaterialAmbient;"
-        "        vec3 diffuseLight  = uLightDiffused * uMaterialDiffused * max(dot(normalizedLightDirection, normalizedTransformedNormals), 0.0);"
+        "        vec3 diffuseLight  = color.rgb * uLightDiffused * uMaterialDiffused * max(dot(normalizedLightDirection, normalizedTransformedNormals), 0.0);"
         "        vec3 specularLight = uLightSpecular * uMaterialSpecular * pow(max(dot(reflectionVector, normalizedViewerVector), 0.0), uMaterialShininess);"
         "\n"
         "        phongADSLight = ambientLight + diffuseLight + specularLight;"
-        "        FragColor = vec4(phongADSLight, 1.0);"
+        "        color = vec4(phongADSLight, 1.0);"
         "    }"
-        "    else"
-        "    {"
-        "        FragColor = vec4(1.0, 1.0, 1.0, 1.0);"
-        "    }"
+        "        FragColor = color;"
         "}";
     shaderProgramObject = loadShaders(vertexShaderSourceCode, fragmentShaderSourceCode);
     if (0U == shaderProgramObject)
@@ -609,7 +617,7 @@ int initialize(void)
         fprintf(gpFile, "Failed to load shaders\n");
         return -1;
     }
-    
+
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "aPosition");
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMALS, "aNormal");
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_UVS, "aTexCoord");
@@ -627,6 +635,8 @@ int initialize(void)
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
 
+    diffuseSamplerUniform = glGetUniformLocation(shaderProgramObject, "uDiffuseSampler");
+
     lightAmbientUniform  = glGetUniformLocation(shaderProgramObject, "uLightAmbient");
     lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "uLightDiffused");
     lightSpecularUniform = glGetUniformLocation(shaderProgramObject, "uLightSpecular");
@@ -637,7 +647,7 @@ int initialize(void)
     materialSpecularUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialSpecular");
     materialShininessUniform = glGetUniformLocation(shaderProgramObject, "uMaterialShininess");
     cameraPositionUniform    = glGetUniformLocation(shaderProgramObject, "uCameraPosition");
-    
+
     keyPressedUniform = glGetUniformLocation(shaderProgramObject, "uKeyPressed");
 
     glGenVertexArrays(1, &vao);
@@ -686,6 +696,8 @@ int initialize(void)
     /* Reset Projection Matrix */
     projectionMatrix = mat4::identity();
 
+    /* Texture loading */
+    textureDiffuse = loadGLTexture("rock.png");
 
     resize(WIN_WIDTH, WIN_HEIGHT);
 
@@ -719,7 +731,7 @@ void display(void)
     {
         viewMatrix     = lookat(cameraPosition, cameraDirection, vec3(0.0f, 1.0f, 0.0f));
         rotationMatrix = rotate(modelAngle, 0.0f, 1.0f, 0.0f);
-        modelMatrix    = translate(0.0f, 0.0f, 0.0f);
+        modelMatrix    = translate(0.0f, -2.0f, 0.0f);
         modelMatrix    = modelMatrix * rotationMatrix;
 
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
@@ -745,6 +757,10 @@ void display(void)
         {
             glUniform1i(keyPressedUniform, 0);
         }
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureDiffuse);
+        glUniform1i(diffuseSamplerUniform, 0);
+
         glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);

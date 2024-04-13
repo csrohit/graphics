@@ -3,25 +3,25 @@
 #include <stdint.h>
 #include <stddef.h>
 
-struct Position
+typedef struct Position
 {
     float x;
     float y;
     float z;
-};
+} Position;
 
-struct Index
+typedef struct Index
 {
     int v;
     int t;
     int n;
-};
+} Index;
 
-struct Texel
+typedef struct Texel
 {
     float u;
     float v;
-};
+} Texel;
 
 struct Face // triangle
 {
@@ -31,47 +31,46 @@ struct Face // triangle
     uint32_t fIndex;
 };
 
-struct Header
+typedef struct Header
 {
+    char     name[20];
     uint32_t nVertices;
     uint32_t nIndices;
-};
+} Header;
 
 struct Group
 {
-    struct Group *next;
+    struct Group* next;
     int32_t       iMaterial;
     uint32_t      nFaces;
-    uint32_t     *piFaces;
-    char         *name;
+    uint32_t*     piFaces;
+    char*         name;
 };
 
-struct Model
+typedef struct Vertex
 {
-    struct Material *pMaterials;
-    struct Position *pVertices;
-    struct Position *pNormals;
-    struct Texel    *pTexels;
-    struct Group    *pGroups;
-    struct Face     *pFaces;
-    uint32_t         nVertices;
-    uint32_t         nNormals;
-    uint32_t         nTexels;
-    uint32_t         nMaterials;
-    uint32_t         nGroups;
-    uint32_t         nFaces;
-};
+    Position position;
+    Position normal;
+    Texel    texel;
+} Vertex;
+
+typedef struct Model
+{
+    Header    header;
+    Vertex*   pVertices;
+    uint32_t* pIndices;
+} Model;
 
 struct Material
 {
     /*
      * @note:
-     *  if metallic >  0 then illuminationModel = 3 and value of 
+     *  if metallic >  0 then illuminationModel = 3 and value of
      *    metallic corresponds to ambient reflectance
      *  if metallic == 0 then illuminationModel = 2 and ambient reflectance is 1
      */
     /* Name of material */
-    char *name;
+    char* name;
 
     /* [Metallic] - Ambient reflectance of material */
     float rAmbient[4];
@@ -98,15 +97,17 @@ struct Material
     uint32_t illuminationModel;
 
     /* file path of texture image */
-    char *texturePath;
+    char* texturePath;
 };
 
-int        processMaterialFile(char *pFile, struct Model *pModel);
-void       printMaterial(struct Material *pMaterial);
-void       deleteMaterials(struct Material *pMaterials, int nMaterials);
-int        loadModel(char *filename, struct Model **pModel);
-void       unloadModel(struct Model *pModel);
-void       printModel(struct Model *pModel);
-static int findMaterial(struct Model *pModel, char *name);
+int        processMaterialFile(char* pFile, struct Model* pModel);
+void       printMaterial(struct Material* pMaterial);
+void       deleteMaterials(struct Material* pMaterials, int nMaterials);
+int        readObj(char* filename, Model* pModel);
+void       unloadModel(struct Model* pModel);
+void       printModel(struct Model* pModel);
+static int findMaterial(struct Model* pModel, char* name);
+int        exportModel(Model* pModel, const char* pFileName);
+int        loadModel(Model* pModel, const char* pFileName);
 
 #endif // !LOAD_H

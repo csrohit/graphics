@@ -1,5 +1,6 @@
 Program for Model Loading started successfully!!!!
 Model loaded successfully
 ----- Shader Program Linked Successfully -----
+Texture loaded rock.png, nChannels 3
 
 ----- Program Completed Successfully -----

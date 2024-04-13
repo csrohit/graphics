@@ -1,36 +1,41 @@
 /**
- * @file    ogl.cpp
- * @brief   Template file for texture mapping
+ * @file    main.cpp
+ * @brief   Model Texturing
  * @author  Rohit Nimkar
- * @date    09/04/2024
+ * @date    2024-04-10
  * @version 1.1
  */
 
-/* Link with OpenGl libraries */
+/*--- Linked libraries ---*/
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "kernel32.lib")
 #pragma comment(lib, "glew32.lib")
 #pragma comment(lib, "OpenGL32.lib")
 
-/* Windows Header files */
+/*--- System Headers ---*/
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <string.h>
+
+/*--- Windows Headers ---*/
 #include <Windows.h>
-#include <stdio.h>
-#include <stdlib.h>
 
-/* OpenGL header files */
-#include <gl/glew.h> // this must be before gl/GL.h
-#include <gl/GL.h>
+/*--- OpenGL Headers ---*/
+#include <GL/glew.h>
+#include <GL/gl.h>
 
-/* External libraries */
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
+/*--- Library headers ---*/
 #include "vmath.h"
 using namespace vmath;
 
-/* Program headers */
-#include "OGL.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+/*--- Program headers ---*/
+#include "ogl.h"
 #include "load.h"
 
 /* Macro definitions */
@@ -41,11 +46,12 @@ using namespace vmath;
 enum
 {
     AMC_ATTRIBUTE_POSITION = 0,
-    AMC_ATTRIBUTE_NORMAL,
-    AMC_ATTRIBUTE_TEXCOORD,
-    AMC_ATTRIBUTE_TANGENT
+    AMC_ATTRIBUTE_COLOR,
+    AMC_ATTRIBUTE_NORMALS,
+    AMC_ATTRIBUTE_UVS
 };
 
+/*--- FUnction Declaration ---*/
 /**
  * @brief Windows Procedure callback function
  *
@@ -68,6 +74,7 @@ int initialize(void);
  * @brief UnInitialize OpenGL context
  */
 void uninitialize(void);
+
 /**
  * @brief Display contexts on screen
  */
@@ -90,6 +97,20 @@ void ToggleFullScreen(void);
  * @param height [in] - Requested height
  */
 void resize(int width, int height);
+
+/**
+ * @brief Load texture into memory
+ *
+ * @param filename [in]  - file name
+ *
+ * @returns texture id
+ */
+GLuint loadGLTexture(const char* filename);
+
+/**
+ * @brief Print OpenGL Driver information
+ */
+void printGLInfo(void);
 
 /**
  * @brief Compile shader
@@ -120,37 +141,8 @@ GLint linkProgram(GLuint programId);
  */
 GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
 
-/**
- * @brief Load texture into memory
- *
- * @param texture  [out] - pointer to texture id
- * @param filename [in]  - file name
- *
- * @returns texture id
- */
-void  loadGLTexture(GLuint* texture, const char* filename);
-
 /* Global variable declaration */
-GLuint shaderProgramObject;
-
-GLuint modelMatrixUniform;
-GLuint viewMatrixUniform;
-GLuint projectionMatrixUniform;
-
-GLuint vao;
-GLuint vboPosition;
-GLuint diffuseTextureUniform;
-GLuint vboTexCoords;
-GLuint eboSpheres;
-GLuint textureFloor;
-
-mat4 perspectiveProjectionMatrix;
-vec3 lightPosition;
-
-struct Model * pModel = NULL;
-
-/* Windows related variable declaration */
-FILE*           gpFile       = NULL;                      // file pointer for logging
+FILE*           gpFile       = NULL;                      // log file handle
 HWND            gHwnd        = NULL;                      // global window handle
 BOOL            gbActive     = FALSE;                     // indicate if window is active
 DWORD           gdwStyle     = 0;                         // unsigned long 32bit
@@ -158,6 +150,58 @@ WINDOWPLACEMENT gwpPrev      = {sizeof(WINDOWPLACEMENT)}; // previous window pla
 BOOL            gbFullScreen = FALSE;                     // win32s BOOL not c++ bool
 HDC             ghdc         = NULL;                      // global handle for device context
 HGLRC           ghrc         = NULL;                      // Global handle for rendering context
+
+/* OpenGL identifiers */
+GLuint shaderProgramObject;
+GLuint vao         = 0U;
+GLuint vboPosition = 0U;
+GLuint eboSpheres  = 0U;
+
+/* Matrix uniforms */
+GLuint modelMatrixUniform;
+GLuint viewMatrixUniform;
+GLuint projectionMatrixUniform;
+GLuint cameraPositionUniform;
+
+mat4 projectionMatrix;
+
+/* Light uniforms */
+GLuint lightAmbientUniform  = 0;
+GLuint lightDiffuseUniform  = 0;
+GLuint lightSpecularUniform = 0;
+GLuint lightPositionUniform = 0;
+
+GLfloat lightAmbient[]  = {0.2f, 0.2f, 0.2f, 1.0f};       // grey ambient light
+GLfloat lightDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f};       // white diffused light
+GLfloat lightSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f};       // specular color
+GLfloat lightPosition[] = {100.0f, 100.0f, 100.0f, 1.0f}; // position of light
+
+/* Material uniforms */
+GLuint materialAmbientUniform   = 0;
+GLuint materialSpecularUniform  = 0;
+GLuint materialDiffusedUniform  = 0;
+GLuint materialShininessUniform = 0;
+
+GLfloat materialAmbient[]  = {0.2f, 0.2f, 0.2f, 0.2f}; // ambient reflectance
+GLfloat materialDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f}; // diffuse reflectance
+GLfloat materialSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f}; // specular reflectance
+GLfloat materialShinyness  = 128.0f;                   // concentration of specular component
+
+/* Texture uniforms */
+GLuint diffuseSamplerUniform = 0U;
+
+GLuint textureDiffuse = 0U;
+
+/* Toggle uniforms */
+GLuint keyPressedUniform = 0;
+BOOL   bLightingEnabled  = FALSE;
+
+/* Variables */
+Model model      = {0};
+float lightAngle = 0.0f;
+float modelAngle = 0.0f;
+
+BOOL bAnimationEnabled = TRUE;
 
 /**
  * @brief Entry point function for Win32 Desktop application
@@ -169,13 +213,13 @@ HGLRC           ghrc         = NULL;                      // Global handle for r
  *
  * @return return value from the application
  */
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLine, int iCmdShow) // WinMain => --WinMainCRTStartup => --mainCRTStartup  (crt0.c)  CRT=? C Runtime 0th file  icmdshow => argc
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLine, int iCmdShow)
 {
     /* Local variables */
     WNDCLASSEX wndclass             = {0};  // window class typw of window , EX dor extended
     HWND       hwnd                 = NULL; // handle though it uint*  its uint only bcoz can't dereference it. opaque ptr
     MSG        msg                  = {0};  // struct
-    TCHAR      szAppName[]          = TEXT("OpenGL Window Class Name");
+    TCHAR      szAppName[]          = TEXT("Rohit Nimkar: OpenGL Effects");
     int        xDesktopWindowWidth  = 0;     // width of desktop window in pixels
     int        yDesktopWindowHeight = 0;     // height of desktop window in pixels
     int        x                    = 0;     // window leftmost point
@@ -183,13 +227,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     int        iResult              = 0;     // result of operations
     BOOL       bDone                = FALSE; // flag to indicate message loop compuletion status
 
-    gpFile = fopen("Log.txt", "w");
+    gpFile = fopen("log.txt", "w");
     if (NULL == gpFile)
     {
         MessageBox(NULL, TEXT("Log file can not be opened"), TEXT("ERROR"), MB_OK | MB_ICONERROR);
         exit(0);
     }
-    fprintf(gpFile, "Program for Black Screen started successfully!!!!\n");
+    fprintf(gpFile, "Program for Model Loading started successfully!!!!\n");
 
     // WNDCLASSEX wndclass initialization predefined classes => button,dialog,scrollbar,status,dynamic
     wndclass.cbSize      = sizeof(WNDCLASSEX);                    // count of bytes in WNDCLASSEX
@@ -218,7 +262,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     hwnd = CreateWindowEx(
         WS_EX_APPWINDOW,                                                      // extended window style
         szAppName,                                                            // window class name
-        TEXT("Rohit Nimkar: RTR5"),                                           // caption
+        TEXT("Model texturing: Rohit Nimkar"),                               // caption
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE, // window styles
         x,                                                                    // x co-ordinate of windows top-left corner
         y,                                                                    // y co-ordinate of windows top-left corner
@@ -229,6 +273,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
         hInstance,                                                            // handle to instance of module associated with window
         NULL);                                                                // Pointer to a value to be passed to the window through the WM_CREATE message.
 
+    // style of window => 6types = WS_OVERLAPPPED | WS_CAPTION | WS_SYSMENU (move/resize..sys bcoz for all windows) | WS_THICKFRAME |WS_NAXIMIZEBOX | WS_MINIMIZEBOX
     gHwnd = hwnd;
 
     // initialization
@@ -251,7 +296,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
             if (msg.message == WM_QUIT)
+            {
                 bDone = TRUE;
+            }
             else
             {
                 UNUSED_VAL(TranslateMessage(&msg));
@@ -264,9 +311,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
             {
                 /* If window is focused then display the window and update state */
                 display();
-
                 SwapBuffers(ghdc);
-                // update();
+                if (TRUE == bAnimationEnabled)
+                {
+                    update();
+                }
             }
         }
     }
@@ -333,6 +382,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
                         break;
                     }
                     break;
+                case 'L':
+                case 'l':
+                {
+                    if (bLightingEnabled)
+                    {
+                        bLightingEnabled = FALSE;
+                    }
+                    else
+                    {
+                        bLightingEnabled = TRUE;
+                    }
+                }
+                break;
+                case 'A':
+                case 'a':
+                {
+                    if (bAnimationEnabled)
+                    {
+                        bAnimationEnabled = FALSE;
+                    }
+                    else
+                    {
+                        bAnimationEnabled = TRUE;
+                    }
+                }
             }
             break;
         }
@@ -383,12 +457,17 @@ void ToggleFullScreen(void)
 
 int initialize(void)
 {
+    if (0 > loadModel(&model, "rock.model"))
+    {
+        fprintf(gpFile, "Failed to load model sphere.model\n");
+        return -1;
+    }
+
+    fprintf(gpFile, "Model loaded successfully\n");
     PIXELFORMATDESCRIPTOR pfd               = {};
     int                   iPixelFormatIndex = 0;
-    BOOL                  bResult           = FALSE;
-
     ZeroMemory(&pfd, sizeof(PIXELFORMATDESCRIPTOR));
-    loadModel("sphere.obj", &pModel);
+
     /* Step 1: initialization of pixelformat descriptor */
     pfd.nSize      = sizeof(PIXELFORMATDESCRIPTOR);
     pfd.nVersion   = 1;
@@ -451,248 +530,306 @@ int initialize(void)
         return (-6);
     }
 
-    // opengl related log
-    fprintf(gpFile, "OpenGL Information\n");
-    fprintf(gpFile, "OpenGL Vendor     : %s\n", glGetString(GL_VENDOR));
-    fprintf(gpFile, "OpenGL Renderer   : %s\n", glGetString(GL_RENDERER));
-    fprintf(gpFile, "OpenGL Version    : %s\n", glGetString(GL_VERSION));
-    fprintf(gpFile, "GLSL Version      : %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+    // printGLInfo();
 
     const GLchar* vertexShaderSourceCode =
         "#version 460 core"
         "\n"
-        "in  vec3 vPosition;"
-        "in  vec2 vTexCoord;"
-        "out vec2 out_texCoord;"
-        "uniform mat4 u_modelMatrix;"
-        "uniform mat4 u_viewMatrix;"
-        "uniform mat4 u_projectionMatrix;"
+        "in vec3 aPosition;"
+        "in vec3 aNormal;"
+        "in vec2 aTexCoord;"
+        "\n"
+        "out vec3 oTransformedNormals;"
+        "out vec3 oLightDirection;"
+        "out vec3 oViewerVector;"
+        "out vec2 oTexCoord;"
+        "\n"
+        "uniform int   uKeyPressed;"
+        "uniform mat4  uModelMatrix;"
+        "uniform mat4  uViewMatrix;"
+        "uniform mat4  uProjectionMatrix;"
+        "uniform vec3  uLightPosition;"
+        "\n"
         "void main(void)"
         "{"
-        "   out_texCoord = vTexCoord;"
-        "   gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix *  vec4(vPosition, 1.0f);"
+        "    vec4 eyeCoords = uViewMatrix * uModelMatrix * vec4(aPosition, 1.0f);"
+        "    if (uKeyPressed == 1)"
+        "    {"
+        "        oTransformedNormals = mat3(uViewMatrix * uModelMatrix) * aNormal;"
+        "        oLightDirection     = uLightPosition - eyeCoords.xyz;"
+        "        oViewerVector       = - eyeCoords.xyz;"
+        "    }"
+        "    else"
+        "    {"
+        "        oTransformedNormals = vec3(0, 0, 0);"
+        "        oLightDirection     = vec3(0, 0, 0);"
+        "        oViewerVector       = vec3(0, 0, 0);"
+        "    }"
+        "    gl_Position = uProjectionMatrix * eyeCoords;"
+        "    oTexCoord = aTexCoord;"
         "}";
 
     const GLchar* fragmentShaderSourceCode =
         "#version 460 core"
         "\n"
-        "uniform sampler2D diffuse_texture;"
-        "in  vec2 out_texCoord;"
+        "in vec3 oTransformedNormals;"
+        "in vec3 oLightDirection;"
+        "in vec3 oViewerVector;"
+        "in vec2 oTexCoord;"
+        "\n"
         "out vec4 FragColor;"
+        "\n"
+        "uniform int   uKeyPressed;"
+        "uniform vec3  uLightAmbient;"
+        "uniform vec3  uLightDiffused;"
+        "uniform vec3  uLightSpecular;"
+
+        "uniform vec3  uMaterialAmbient;"
+        "uniform vec3  uMaterialDiffused;"
+        "uniform vec3  uMaterialSpecular;"
+        "uniform float uMaterialShininess;"
+
+        "uniform sampler2D uDiffuseSampler;"
+
         "void main(void)"
         "{"
-        "   FragColor = texture(diffuse_texture, out_texCoord);"
+        "    vec3 phongADSLight;"
+        "    vec4 color = texture(uDiffuseSampler, oTexCoord);"
+        "    if (uKeyPressed == 1)"
+        "    {"
+        "        vec3 normalizedTransformedNormals = normalize(oTransformedNormals);"
+        "        vec3 normalizedLightDirection     = normalize(oLightDirection);"
+        "        vec3 normalizedViewerVector       = normalize(oViewerVector);"
+        "        vec3 reflectionVector             = reflect(-normalizedLightDirection, normalizedTransformedNormals);"
+        "\n"
+        "        vec3 ambientLight  = uLightAmbient * uMaterialAmbient;"
+        "        vec3 diffuseLight  = color.rgb * uLightDiffused * uMaterialDiffused * max(dot(normalizedLightDirection, normalizedTransformedNormals), 0.0);"
+        "        vec3 specularLight = uLightSpecular * uMaterialSpecular * pow(max(dot(reflectionVector, normalizedViewerVector), 0.0), uMaterialShininess);"
+        "\n"
+        "        phongADSLight = ambientLight + diffuseLight + specularLight;"
+        "        color = vec4(phongADSLight, 1.0);"
+        "    }"
+        "        FragColor = color;"
         "}";
-
     shaderProgramObject = loadShaders(vertexShaderSourceCode, fragmentShaderSourceCode);
     if (0U == shaderProgramObject)
     {
-        fprintf(gpFile, "-> Failed to load shaders into memory\n");
+        fprintf(gpFile, "Failed to load shaders\n");
         return -1;
     }
 
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMAL, "vNormal");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TEXCOORD, "vTexCoord");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "aPosition");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMALS, "aNormal");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_UVS, "aTexCoord");
 
-    if (0U == linkProgram(shaderProgramObject))
+    if (GL_TRUE != linkProgram(shaderProgramObject))
     {
-        fprintf(gpFile, "-> Failed to link shader program\n");
+        fprintf(gpFile, "Failed to link shaders\n");
         return -1;
     }
 
-    fprintf(gpFile, "-> shader program linked successfully\n");
+    fprintf(gpFile, "----- Shader Program Linked Successfully -----\n");
 
-    modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "u_modelMatrix");
-    viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "u_viewMatrix");
-    projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "u_projectionMatrix");
-    diffuseTextureUniform   = glGetUniformLocation(shaderProgramObject, "diffuse_texture");
-	
-	/* Shader data */
-	const GLfloat vertices[] = {
-		-1.0f, 1.0f,  0.0f, // top-left
-		-1.0f, -1.0f, 0.0f, // bottom-left
-		1.0f,  -1.0f, 0.0f, // bottom-right
-		1.0f,  1.0f,  0.0f, // top-right
-	};
+    // get MVP uniform location
+    modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "uModelMatrix");
+    viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
+    projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
 
-	const GLfloat texCoords[] = {
-		0.0f, 1.0f, // top-left
-		0.0f, 0.0f, // bottom-left
-		1.0f, 0.0f, // bottom-right
-		1.0f, 1.0f  // top-right
-	};
+    diffuseSamplerUniform = glGetUniformLocation(shaderProgramObject, "uDiffuseSampler");
 
-    // setup vao and vbo
+    lightAmbientUniform  = glGetUniformLocation(shaderProgramObject, "uLightAmbient");
+    lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "uLightDiffused");
+    lightSpecularUniform = glGetUniformLocation(shaderProgramObject, "uLightSpecular");
+    lightPositionUniform = glGetUniformLocation(shaderProgramObject, "uLightPosition");
+
+    materialAmbientUniform   = glGetUniformLocation(shaderProgramObject, "uMaterialAmbient");
+    materialDiffusedUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialDiffused");
+    materialSpecularUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialSpecular");
+    materialShininessUniform = glGetUniformLocation(shaderProgramObject, "uMaterialShininess");
+    cameraPositionUniform    = glGetUniformLocation(shaderProgramObject, "uCameraPosition");
+
+    keyPressedUniform = glGetUniformLocation(shaderProgramObject, "uKeyPressed");
+
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
+
     glGenBuffers(1, &vboPosition);
     glBindBuffer(GL_ARRAY_BUFFER, vboPosition);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(positions), positions, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * model.header.nVertices, model.pVertices, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &vboTexCoords);
-    glBindBuffer(GL_ARRAY_BUFFER, vboTexCoords);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(textures), textures, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    
+    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_NORMALS, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMALS);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_UVS, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texel));
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_UVS);
+    glBindBuffer(GL_ARRAY_BUFFER, 0U);
+
     glGenBuffers(1, &eboSpheres);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboSpheres);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(elements), elements, GL_STATIC_DRAW);
-    glBindVertexArray(0);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * model.header.nIndices, model.pIndices, GL_STATIC_DRAW);
 
-    perspectiveProjectionMatrix = mat4::identity();
-    loadGLTexture(&textureFloor, "textures/albedo.png");
+    /*
+        The order of unbinding is important --
+        If Element buffer is unbound before vertex array buffer then we are indicating OpenGl
+        that we do not intend to use element buffer
+     */
+    glBindVertexArray(0U);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    /* Depth */
-    glClearDepth(1.0f);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+    /* Enable Smooth shading */
+    glShadeModel(GL_SMOOTH);
+
+    /* Enabling Depth */
+    glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
+    glEnable(GL_DEPTH_TEST); //[Compulsory] enable depth test
+    glDepthFunc(GL_LEQUAL);  //[Compulsory] Which function to use for testing
+
+    /* Enabling face culling */
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
+    /* Reset Projection Matrix */
+    projectionMatrix = mat4::identity();
+
+    /* Texture loading */
+    textureDiffuse = loadGLTexture("rock.png");
+
     resize(WIN_WIDTH, WIN_HEIGHT);
-    return (0);
-}
 
-void loadGLTexture(GLuint* texture, const char* filename)
-{
-    unsigned char* data      = NULL;
-    int            width     = 0;
-    int            height    = 0;
-    int            nChannels = 0;
-    GLenum         format    = GL_RGB;
-
-    data = stbi_load(filename, &width, &height, &nChannels, 0);
-    if (data == NULL)
-    {
-        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
-        DestroyWindow(gHwnd);
-    }
-
-    if (nChannels == 1)
-    {
-        format = GL_RED;
-    }
-    else if (nChannels == 3)
-    {
-        format = GL_RGB;
-    }
-    else if (nChannels == 4)
-    {
-        format = GL_RGBA;
-    }
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glGenTextures(1, texture);
-    glBindTexture(GL_TEXTURE_2D, *texture);
-
-    // set up texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-    // push the data to texture memory
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(data);
-    data = NULL;
+    return 0;
 }
 
 void resize(int width, int height)
 {
-    if (height == 0)
+    if (height <= 0)
         height = 1;
 
-    glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+    projectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
 
-    perspectiveProjectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    glViewport(0, 0, width, height);
 }
 
 void display(void)
 {
-    mat4 modelMatrix;
-    mat4 viewMatrix;
-    mat4 shadowMatrix;
-    mat4 mvpMatrix;
+    mat4 modelMatrix       = mat4::identity();
+    mat4 translationMatrix = mat4::identity();
+    mat4 scaleMatrix       = mat4::identity();
+    mat4 rotationMatrix    = mat4::identity();
+    mat4 viewMatrix        = mat4::identity();
+    vec3 cameraPosition    = vec3(0.0f, 0.0f, 6.0f);
+    vec3 cameraDirection   = vec3(0.0f, 0.0f, -1.0f);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     glUseProgram(shaderProgramObject);
     glBindVertexArray(vao);
     {
-        viewMatrix  = lookat(vec3(0.0f, 0.0f, 50.0f), vec3(0.0f, -1.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
-        modelMatrix = translate(0.0f, 0.0f, 0.0f) * scale(10.0f, 10.0f, 10.0f);
-        glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
-        glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
-        glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, perspectiveProjectionMatrix);
+        viewMatrix     = lookat(cameraPosition, cameraDirection, vec3(0.0f, 1.0f, 0.0f));
+        rotationMatrix = rotate(modelAngle, 0.0f, 1.0f, 0.0f);
+        modelMatrix    = translate(0.0f, -2.0f, 0.0f);
+        modelMatrix    = modelMatrix * rotationMatrix;
 
+        glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
+        glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, projectionMatrix);
+        glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
+        if (bLightingEnabled == TRUE)
+        {
+            glUniform1i(keyPressedUniform, 1);
+            glUniform3fv(lightPositionUniform, 1, lightPosition);
+            glUniform3fv(cameraPositionUniform, 1, cameraPosition);
+
+            glUniform3fv(lightAmbientUniform, 1, lightAmbient);
+            glUniform3fv(lightDiffuseUniform, 1, lightDiffused);
+            glUniform3fv(lightSpecularUniform, 1, lightSpecular);
+            glUniform4fv(lightPositionUniform, 1, lightPosition);
+
+            glUniform3fv(materialAmbientUniform, 1, materialAmbient);
+            glUniform3fv(materialDiffusedUniform, 1, materialDiffused);
+            glUniform3fv(materialSpecularUniform, 1, materialSpecular);
+            glUniform1f(materialShininessUniform, materialShinyness);
+        }
+        else
+        {
+            glUniform1i(keyPressedUniform, 0);
+        }
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureFloor);
-        glUniform1i(diffuseTextureUniform, 0);
-        glDrawElements(GL_TRIANGLES, pModel->)
+        glBindTexture(GL_TEXTURE_2D, textureDiffuse);
+        glUniform1i(diffuseSamplerUniform, 0);
+
+        glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
     glUseProgram(0);
-    glFlush();
+}
+
+void update()
+{
+    lightAngle += 0.0002;
+    if (360.0f < lightAngle)
+    {
+        lightAngle -= 360.0f;
+    }
+
+    lightPosition[0] = 50.0f * cosf(lightAngle);
+    lightPosition[1] = 0.0f;
+    lightPosition[2] = 50.0f * sinf(lightAngle);
+
+    modelAngle += 0.005;
+    if (360.0f < modelAngle)
+    {
+        modelAngle -= 360.0f;
+    }
 }
 
 void uninitialize(void)
 {
+    unloadModel(&model);
 
-    unloadModel(pModel);
-    if (vao)
-    {
-        glDeleteVertexArrays(1, &vao);
-        vao = 0;
-    }
-
-    if (vboPosition)
+    if (0U != vboPosition)
     {
         glDeleteBuffers(1, &vboPosition);
-        vboPosition = 0;
+        vboPosition = 0U;
     }
 
-    if (vboTexCoords)
+    if (0U != eboSpheres)
     {
-        glDeleteBuffers(1, &vboTexCoords);
-        vboTexCoords = 0;
+        glDeleteBuffers(1, &eboSpheres);
+        eboSpheres = 0U;
     }
 
-    // release textures
-    if (textureFloor)
+    if (0U != vao)
     {
-        glDeleteTextures(1, &textureFloor);
-        textureFloor = 0;
+        glDeleteVertexArrays(1, &vao);
+        vao = 0U;
     }
 
-    // safe shader cleanup
     if (shaderProgramObject)
     {
-        GLsizei shader_count;
-        GLuint* p_shaders = NULL;
+        GLsizei nShaders;
+        GLuint* pShaders = NULL;
 
         glUseProgram(shaderProgramObject);
-        glGetProgramiv(shaderProgramObject, GL_ATTACHED_SHADERS, &shader_count);
+        glGetProgramiv(shaderProgramObject, GL_ATTACHED_SHADERS, &nShaders);
 
-        p_shaders = (GLuint*)malloc(shader_count * sizeof(GLuint));
-        memset((void*)p_shaders, 0, shader_count * sizeof(GLuint));
+        pShaders = (GLuint*)malloc(nShaders * sizeof(GLuint));
+        memset((void*)pShaders, 0, nShaders * sizeof(GLuint));
 
-        glGetAttachedShaders(shaderProgramObject, shader_count, &shader_count, p_shaders);
+        glGetAttachedShaders(shaderProgramObject, nShaders, &nShaders, pShaders);
 
-        for (GLsizei i = 0; i < shader_count; i++)
+        for (GLsizei i = 0; i < nShaders; i++)
         {
-            glDetachShader(shaderProgramObject, p_shaders[i]);
-            glDeleteShader(p_shaders[i]);
-            p_shaders[i] = 0;
+            glDetachShader(shaderProgramObject, pShaders[i]);
+            glDeleteShader(pShaders[i]);
+            pShaders[i] = 0;
         }
 
-        free(p_shaders);
-        p_shaders = NULL;
+        free(pShaders);
+        pShaders = NULL;
 
         glDeleteProgram(shaderProgramObject);
         shaderProgramObject = 0;
@@ -724,6 +861,75 @@ void uninitialize(void)
     }
 }
 
+GLuint loadGLTexture(const char* filename)
+{
+    unsigned char* data      = NULL;
+    int            width     = 0;
+    int            height    = 0;
+    int            nChannels = 0;
+    GLenum         format    = GL_RGB;
+    GLuint         texture   = 0U;
+
+    stbi_set_flip_vertically_on_load(true);
+
+    data = stbi_load(filename, &width, &height, &nChannels, 0);
+    if (data == NULL)
+    {
+        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
+    }
+    else
+    {
+        if (nChannels == 1)
+        {
+            format = GL_RED;
+        }
+        else if (nChannels == 3)
+        {
+            format = GL_RGB;
+        }
+        else if (nChannels == 4)
+        {
+            format = GL_RGBA;
+        }
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+
+        // set up texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+        // push the data to texture memory
+        glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        stbi_image_free(data);
+        data = NULL;
+        fprintf(gpFile, "Texture loaded %s, nChannels %d\n", filename, nChannels);
+    }
+    return texture;
+}
+
+void printGLInfo(void)
+{
+    GLint nExtensions = 0;
+    GLint idx         = 0;
+
+    fprintf(gpFile, "OpenGL Vendor: %s\n", glGetString(GL_VENDOR));
+    fprintf(gpFile, "OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
+    fprintf(gpFile, "OpenGL Version: %s\n", glGetString(GL_VERSION));
+    fprintf(gpFile, "OpenGL SL Version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    /* List supported extensions */
+    glGetIntegerv(GL_NUM_EXTENSIONS, &nExtensions);
+    for (idx = 0; idx < nExtensions; ++idx)
+    {
+        fprintf(gpFile, "%s\n", glGetStringi(GL_EXTENSIONS, idx));
+    }
+}
+
 GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShaderSourceCode)
 {
     GLuint programId = 0U;
@@ -741,12 +947,14 @@ GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShade
         }
         else
         {
+            fprintf(gpFile, "Failed to compile fragment shader: \n");
             glDeleteShader(vertexShaderId);
             glDeleteShader(fragmentShaderId);
         }
     }
     else
     {
+        fprintf(gpFile, "Failed to compile vertex shader: \n");
         glDeleteShader(vertexShaderId);
     }
     return programId;
@@ -769,7 +977,7 @@ GLint compileShader(unsigned int shaderId, const char* shaderSourceCode)
             if (nullptr != szInfoLog)
             {
                 glGetShaderInfoLog(shaderId, infoLogLength, nullptr, szInfoLog);
-                fprintf(gpFile, "Vertex Shader compilation error log: %s\n", szInfoLog);
+                fprintf(gpFile, "Shader compilation error log: %s\n", szInfoLog);
                 free(szInfoLog);
                 szInfoLog = nullptr;
             }
@@ -787,6 +995,7 @@ GLint linkProgram(GLuint programId)
     glGetProgramiv(programId, GL_LINK_STATUS, &status);
     if (GL_FALSE == status)
     {
+        fprintf(gpFile, "Failed to link program \n");
         int infoLogLength = 0;
         glGetProgramiv(programId, GL_INFO_LOG_LENGTH, &infoLogLength);
         if (0 != infoLogLength)
