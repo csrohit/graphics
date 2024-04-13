@@ -220,7 +220,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     WNDCLASSEX wndclass             = {0};  // window class typw of window , EX dor extended
     HWND       hwnd                 = NULL; // handle though it uint*  its uint only bcoz can't dereference it. opaque ptr
     MSG        msg                  = {0};  // struct
-    TCHAR      szAppName[]          = TEXT("OpenGL Window Class Name");
+    TCHAR      szAppName[]          = TEXT("Rohit Nimkar: OpenGL Effects");
     int        xDesktopWindowWidth  = 0;     // width of desktop window in pixels
     int        yDesktopWindowHeight = 0;     // height of desktop window in pixels
     int        x                    = 0;     // window leftmost point
@@ -263,7 +263,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     hwnd = CreateWindowEx(
         WS_EX_APPWINDOW,                                                      // extended window style
         szAppName,                                                            // window class name
-        TEXT("Earth Normal Map"),                                             // caption
+        TEXT("Earth Normal Map: Rohit Nimkar"),                               // caption
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE, // window styles
         x,                                                                    // x co-ordinate of windows top-left corner
         y,                                                                    // y co-ordinate of windows top-left corner
