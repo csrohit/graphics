@@ -1,37 +1,42 @@
 /**
- * @file    ogl.cpp
- * @brief   Template file for texture mapping
+ * @file    main.cpp
+ * @brief   Model Texturing
  * @author  Rohit Nimkar
- * @date    09/04/2024
+ * @date    2024-04-10
  * @version 1.1
  */
 
-/* Link with OpenGl libraries */
+/*--- Linked libraries ---*/
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "kernel32.lib")
 #pragma comment(lib, "glew32.lib")
 #pragma comment(lib, "OpenGL32.lib")
 
-/* Windows Header files */
+/*--- System Headers ---*/
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <string.h>
+
+/*--- Windows Headers ---*/
 #include <Windows.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <vector>
 
-/* OpenGL header files */
-#include <gl/glew.h> // this must be before gl/GL.h
-#include <gl/GL.h>
+/*--- OpenGL Headers ---*/
+#include <GL/glew.h>
+#include <GL/gl.h>
 
-/* External libraries */
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
+/*--- Library headers ---*/
 #include "vmath.h"
 using namespace vmath;
 
-/* Program headers */
-#include "OGL.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+/*--- Program headers ---*/
+#include "ogl.h"
+#include "load.h"
 
 /* Macro definitions */
 #define WIN_WIDTH     800
@@ -41,11 +46,12 @@ using namespace vmath;
 enum
 {
     AMC_ATTRIBUTE_POSITION = 0,
-    AMC_ATTRIBUTE_NORMAL,
-    AMC_ATTRIBUTE_TEXCOORD,
-    AMC_ATTRIBUTE_TANGENT
+    AMC_ATTRIBUTE_COLOR,
+    AMC_ATTRIBUTE_NORMALS,
+    AMC_ATTRIBUTE_UVS
 };
 
+/*--- FUnction Declaration ---*/
 /**
  * @brief Windows Procedure callback function
  *
@@ -68,6 +74,7 @@ int initialize(void);
  * @brief UnInitialize OpenGL context
  */
 void uninitialize(void);
+
 /**
  * @brief Display contexts on screen
  */
@@ -90,6 +97,20 @@ void ToggleFullScreen(void);
  * @param height [in] - Requested height
  */
 void resize(int width, int height);
+
+/**
+ * @brief Load texture into memory
+ *
+ * @param filename [in]  - file name
+ *
+ * @returns texture id
+ */
+GLuint loadGLTexture(const char* filename);
+
+/**
+ * @brief Print OpenGL Driver information
+ */
+void printGLInfo(void);
 
 /**
  * @brief Compile shader
@@ -120,59 +141,8 @@ GLint linkProgram(GLuint programId);
  */
 GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
 
-void GenerateSphere(float radius, float sectorCount, float stackCount);
-
-/**
- * @brief Load texture into memory
- *
- * @param texture  [out] - pointer to texture id
- * @param filename [in]  - file name
- *
- * @returns texture id
- */
-void loadGLTexture(GLuint* texture, const char* filename);
-
 /* Global variable declaration */
-GLuint shaderProgramObject;
-
-GLuint modelMatrixUniform;
-GLuint viewMatrixUniform;
-GLuint projectionMatrixUniform;
-
-GLuint vao;
-GLuint vboPosition;
-GLuint diffuseTextureUniform;
-GLuint specularTextureUniform;
-GLuint vboTexCoords;
-GLuint textureFloor;
-GLuint textureSpecular;
-
-mat4   perspectiveProjectionMatrix;
-vec3   lightPosition;
-GLuint vao_sphere          = 0U;
-GLuint vbo_sphere_position = 0U;
-GLuint vbo_sphere_normal   = 0U;
-GLuint vbo_sphere_texcoord = 0U;
-GLuint vbo_sphere_indices  = 0U;
-
-std::vector<float> vertices;
-std::vector<float> normals;
-std::vector<float> texcoords;
-std::vector<int>   indices;
-
-GLfloat lightAmbient[]  = {0.3f, 0.3f, 0.3f, 3.0f};   // grey ambient light
-GLfloat lightDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f};   // white diffused light
-GLfloat lightSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f};   // specular color
-GLfloat lightPosition[] = {10.0f, 0.0f, 10.0f, 1.0f}; // position of light
-/* Light uniforms */
-GLuint lightAmbientUniform  = 0;
-GLuint lightDiffuseUniform  = 0;
-GLuint lightSpecularUniform = 0;
-GLuint lightPositionUniform = 0;
-
-
-/* Windows related variable declaration */
-FILE*           gpFile       = NULL;                      // file pointer for logging
+FILE*           gpFile       = NULL;                      // log file handle
 HWND            gHwnd        = NULL;                      // global window handle
 BOOL            gbActive     = FALSE;                     // indicate if window is active
 DWORD           gdwStyle     = 0;                         // unsigned long 32bit
@@ -180,6 +150,58 @@ WINDOWPLACEMENT gwpPrev      = {sizeof(WINDOWPLACEMENT)}; // previous window pla
 BOOL            gbFullScreen = FALSE;                     // win32s BOOL not c++ bool
 HDC             ghdc         = NULL;                      // global handle for device context
 HGLRC           ghrc         = NULL;                      // Global handle for rendering context
+
+/* OpenGL identifiers */
+GLuint shaderProgramObject;
+GLuint vao         = 0U;
+GLuint vboPosition = 0U;
+GLuint eboSpheres  = 0U;
+
+/* Matrix uniforms */
+GLuint modelMatrixUniform;
+GLuint viewMatrixUniform;
+GLuint projectionMatrixUniform;
+GLuint cameraPositionUniform;
+
+mat4 projectionMatrix;
+
+/* Light uniforms */
+GLuint lightAmbientUniform  = 0;
+GLuint lightDiffuseUniform  = 0;
+GLuint lightSpecularUniform = 0;
+GLuint lightPositionUniform = 0;
+
+GLfloat lightAmbient[]  = {0.2f, 0.2f, 0.2f, 1.0f};       // grey ambient light
+GLfloat lightDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f};       // white diffused light
+GLfloat lightSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f};       // specular color
+GLfloat lightPosition[] = {100.0f, 100.0f, 100.0f, 1.0f}; // position of light
+
+/* Material uniforms */
+GLuint materialAmbientUniform   = 0;
+GLuint materialSpecularUniform  = 0;
+GLuint materialDiffusedUniform  = 0;
+GLuint materialShininessUniform = 0;
+
+GLfloat materialAmbient[]  = {0.2f, 0.2f, 0.2f, 0.2f}; // ambient reflectance
+GLfloat materialDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f}; // diffuse reflectance
+GLfloat materialSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f}; // specular reflectance
+GLfloat materialShinyness  = 128.0f;                   // concentration of specular component
+
+/* Texture uniforms */
+GLuint diffuseSamplerUniform = 0U;
+
+GLuint textureDiffuse = 0U;
+
+/* Toggle uniforms */
+GLuint keyPressedUniform = 0;
+BOOL   bLightingEnabled  = FALSE;
+
+/* Variables */
+Model model      = {0};
+float lightAngle = 0.0f;
+float modelAngle = 0.0f;
+
+BOOL bAnimationEnabled = TRUE;
 
 /**
  * @brief Entry point function for Win32 Desktop application
@@ -191,13 +213,13 @@ HGLRC           ghrc         = NULL;                      // Global handle for r
  *
  * @return return value from the application
  */
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLine, int iCmdShow) // WinMain => --WinMainCRTStartup => --mainCRTStartup  (crt0.c)  CRT=? C Runtime 0th file  icmdshow => argc
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLine, int iCmdShow)
 {
     /* Local variables */
     WNDCLASSEX wndclass             = {0};  // window class typw of window , EX dor extended
     HWND       hwnd                 = NULL; // handle though it uint*  its uint only bcoz can't dereference it. opaque ptr
     MSG        msg                  = {0};  // struct
-    TCHAR      szAppName[]          = TEXT("OpenGL Window Class Name");
+    TCHAR      szAppName[]          = TEXT("Rohit Nimkar: OpenGL Effects");
     int        xDesktopWindowWidth  = 0;     // width of desktop window in pixels
     int        yDesktopWindowHeight = 0;     // height of desktop window in pixels
     int        x                    = 0;     // window leftmost point
@@ -205,13 +227,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     int        iResult              = 0;     // result of operations
     BOOL       bDone                = FALSE; // flag to indicate message loop compuletion status
 
-    gpFile = fopen("Log.txt", "w");
+    gpFile = fopen("log.txt", "w");
     if (NULL == gpFile)
     {
         MessageBox(NULL, TEXT("Log file can not be opened"), TEXT("ERROR"), MB_OK | MB_ICONERROR);
         exit(0);
     }
-    fprintf(gpFile, "Program for Black Screen started successfully!!!!\n");
+    fprintf(gpFile, "Program for Model Loading started successfully!!!!\n");
 
     // WNDCLASSEX wndclass initialization predefined classes => button,dialog,scrollbar,status,dynamic
     wndclass.cbSize      = sizeof(WNDCLASSEX);                    // count of bytes in WNDCLASSEX
@@ -240,7 +262,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     hwnd = CreateWindowEx(
         WS_EX_APPWINDOW,                                                      // extended window style
         szAppName,                                                            // window class name
-        TEXT("Rohit Nimkar: RTR5"),                                           // caption
+        TEXT("Model texturing: Rohit Nimkar"),                               // caption
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE, // window styles
         x,                                                                    // x co-ordinate of windows top-left corner
         y,                                                                    // y co-ordinate of windows top-left corner
@@ -251,6 +273,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
         hInstance,                                                            // handle to instance of module associated with window
         NULL);                                                                // Pointer to a value to be passed to the window through the WM_CREATE message.
 
+    // style of window => 6types = WS_OVERLAPPPED | WS_CAPTION | WS_SYSMENU (move/resize..sys bcoz for all windows) | WS_THICKFRAME |WS_NAXIMIZEBOX | WS_MINIMIZEBOX
     gHwnd = hwnd;
 
     // initialization
@@ -273,7 +296,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
             if (msg.message == WM_QUIT)
+            {
                 bDone = TRUE;
+            }
             else
             {
                 UNUSED_VAL(TranslateMessage(&msg));
@@ -286,9 +311,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
             {
                 /* If window is focused then display the window and update state */
                 display();
-
                 SwapBuffers(ghdc);
-                // update();
+                if (TRUE == bAnimationEnabled)
+                {
+                    update();
+                }
             }
         }
     }
@@ -355,6 +382,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
                         break;
                     }
                     break;
+                case 'L':
+                case 'l':
+                {
+                    if (bLightingEnabled)
+                    {
+                        bLightingEnabled = FALSE;
+                    }
+                    else
+                    {
+                        bLightingEnabled = TRUE;
+                    }
+                }
+                break;
+                case 'A':
+                case 'a':
+                {
+                    if (bAnimationEnabled)
+                    {
+                        bAnimationEnabled = FALSE;
+                    }
+                    else
+                    {
+                        bAnimationEnabled = TRUE;
+                    }
+                }
             }
             break;
         }
@@ -405,10 +457,15 @@ void ToggleFullScreen(void)
 
 int initialize(void)
 {
+    if (0 > loadModel(&model, "sphere.model"))
+    {
+        fprintf(gpFile, "Failed to load model sphere.model\n");
+        return -1;
+    }
+
+    fprintf(gpFile, "Model loaded successfully\n");
     PIXELFORMATDESCRIPTOR pfd               = {};
     int                   iPixelFormatIndex = 0;
-    BOOL                  bResult           = FALSE;
-
     ZeroMemory(&pfd, sizeof(PIXELFORMATDESCRIPTOR));
 
     /* Step 1: initialization of pixelformat descriptor */
@@ -473,12 +530,7 @@ int initialize(void)
         return (-6);
     }
 
-    // opengl related log
-    fprintf(gpFile, "OpenGL Information\n");
-    fprintf(gpFile, "OpenGL Vendor     : %s\n", glGetString(GL_VENDOR));
-    fprintf(gpFile, "OpenGL Renderer   : %s\n", glGetString(GL_RENDERER));
-    fprintf(gpFile, "OpenGL Version    : %s\n", glGetString(GL_VERSION));
-    fprintf(gpFile, "GLSL Version      : %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+    // printGLInfo();
 
     const GLchar* vertexShaderSourceCode =
         "#version 460 core"
@@ -487,317 +539,303 @@ int initialize(void)
         "in vec3 aNormal;"
         "in vec2 aTexCoord;"
         "\n"
-        "out vec2 oTexCoord;"
+        "out vec3 oTransformedNormals;"
         "out vec3 oLightDirection;"
-        "out vec3 oViewDirection;"
+        "out vec3 oViewerVector;"
+        "out vec2 oTexCoord;"
         "\n"
-        "uniform mat4 uModelMatrix;"
-        "uniform mat4 uViewMatrix;"
-        "uniform mat4 uProjectionMatrix;"
-        "uniform vec3 uLightPosition;"
-        "uniform vec3 uViewPosition;"
+        "uniform int   uKeyPressed;"
+        "uniform mat4  uModelMatrix;"
+        "uniform mat4  uViewMatrix;"
+        "uniform mat4  uProjectionMatrix;"
+        "uniform vec3  uLightPosition;"
         "\n"
         "void main(void)"
         "{"
-        "\n"
-        "   vec3 aTangent = normalize(vec3(-aPosition.z, 0, -aPosition.x));"
-        "   mat3 normalMatrix = transpose(inverse(mat3(uModelMatrix)));"
-        "   vec3 T = normalize(normalMatrix * aTangent);"
-        "   vec3 N = normalize(normalMatrix * aNormal);"
-        "   T = normalize(T - dot(T, N) * N);"
-        "   vec3 B = cross(N, T);"
-        "   mat3 TBN = transpose(mat3(T, B, N));"
-        "\n"
-        "   vec3 oTangentLightPos = TBN * uLightPosition;"
-        "   vec3 oTangentViewPos  = TBN * uViewPosition;"
-        "   vec3 tangentFragPos   = vec3(uModelMatrix * vec4(aPosition, 1.0f));"
-        "   oLightDirection = oTangentLightPos - tangentFragPos;"
-        "   oViewDirection  = oTangentViewPos - tangentFragPos;"
-        "\n"
-        "   gl_Position = uProjectionMatrix * uViewMatrix * vec4(tangentFragPos, 1.0f);"
-        "   oTexCoord = aTexCoord;"
+        "    vec4 eyeCoords = uViewMatrix * uModelMatrix * vec4(aPosition, 1.0f);"
+        "    if (uKeyPressed == 1)"
+        "    {"
+        "        oTransformedNormals = mat3(uViewMatrix * uModelMatrix) * aNormal;"
+        "        oLightDirection     = uLightPosition - eyeCoords.xyz;"
+        "        oViewerVector       = - eyeCoords.xyz;"
+        "    }"
+        "    else"
+        "    {"
+        "        oTransformedNormals = vec3(0, 0, 0);"
+        "        oLightDirection     = vec3(0, 0, 0);"
+        "        oViewerVector       = vec3(0, 0, 0);"
+        "    }"
+        "    gl_Position = uProjectionMatrix * eyeCoords;"
+        "    oTexCoord = aTexCoord;"
         "}";
 
     const GLchar* fragmentShaderSourceCode =
         "#version 460 core"
         "\n"
-        "in vec2 oTexCoord;"
+        "in vec3 oTransformedNormals;"
         "in vec3 oLightDirection;"
-        "in vec3 oViewDirection;"
+        "in vec3 oViewerVector;"
+        "in vec2 oTexCoord;"
         "\n"
         "out vec4 FragColor;"
         "\n"
+        "uniform int   uKeyPressed;"
+        "uniform vec3  uLightAmbient;"
+        "uniform vec3  uLightDiffused;"
+        "uniform vec3  uLightSpecular;"
+
+        "uniform vec3  uMaterialAmbient;"
+        "uniform vec3  uMaterialDiffused;"
+        "uniform vec3  uMaterialSpecular;"
+        "uniform float uMaterialShininess;"
+
         "uniform sampler2D uDiffuseSampler;"
-        "uniform sampler2D uSpecularSampler;"
-        "uniform sampler2D uNormalSampler;"
-        "\n"
-        "uniform vec3 uLightAmbient;"
-        "uniform vec3 uLightDiffused;"
-        "uniform vec3 uLightSpecular;"
-        "\n"
+
         "void main(void)"
         "{"
-        "   vec3 normal = normalize(texture(uNormalSampler, oTexCoord).rgb * 2.0f - 1.0f);"
-        "   vec3 color  = texture(uDiffuseSampler, oTexCoord).rgb;"
-        "   vec3 spec1  = texture(uSpecularSampler, oTexCoord).rgb;"
+        "    vec3 phongADSLight;"
+        "    vec4 color = texture(uDiffuseSampler, oTexCoord);"
+        "    if (uKeyPressed == 1)"
+        "    {"
+        "        vec3 normalizedTransformedNormals = normalize(oTransformedNormals);"
+        "        vec3 normalizedLightDirection     = normalize(oLightDirection);"
+        "        vec3 normalizedViewerVector       = normalize(oViewerVector);"
+        "        vec3 reflectionVector             = reflect(-normalizedLightDirection, normalizedTransformedNormals);"
         "\n"
-        "   vec3 lightDirection = normalize(oLightDirection);"
-        "   vec3 view_direction = normalize(oViewDirection);"
-        "   vec3 reflect_direction = reflect(-lightDirection, normal);"
-        "   vec3 halfway_direction = normalize(lightDirection + view_direction);"
+        "        vec3 ambientLight  = uLightAmbient * uMaterialAmbient;"
+        "        vec3 diffuseLight  = color.rgb * uLightDiffused * uMaterialDiffused * max(dot(normalizedLightDirection, normalizedTransformedNormals), 0.0);"
+        "        vec3 specularLight = uLightSpecular * uMaterialSpecular * pow(max(dot(reflectionVector, normalizedViewerVector), 0.0), uMaterialShininess);"
         "\n"
-        "   vec3 ambient  = uLightAmbient * color;"
-        "   vec3 diffuse  = uLightDiffused * color * max(dot(lightDirection, normal), 0.0f);"
-        "   vec3 specular = uLightSpecular * spec1 * pow(max(dot(normal, halfway_direction), 0.0f), 50);"
-
-        "   vec3 finalLight = ambient + diffuse + specular;"
-        "   FragColor = vec4(finalLight, 1.0f);"
+        "        phongADSLight = ambientLight + diffuseLight + specularLight;"
+        "        color = vec4(phongADSLight, 1.0);"
+        "    }"
+        "        FragColor = color;"
         "}";
     shaderProgramObject = loadShaders(vertexShaderSourceCode, fragmentShaderSourceCode);
     if (0U == shaderProgramObject)
     {
-        fprintf(gpFile, "-> Failed to load shaders into memory\n");
+        fprintf(gpFile, "Failed to load shaders\n");
         return -1;
     }
 
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "aPosition");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMAL, "aNormal");
-    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_TEXCOORD, "aTexCoord");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMALS, "aNormal");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_UVS, "aTexCoord");
 
-    if (0U == linkProgram(shaderProgramObject))
+    if (GL_TRUE != linkProgram(shaderProgramObject))
     {
-        fprintf(gpFile, "-> Failed to link shader program\n");
+        fprintf(gpFile, "Failed to link shaders\n");
         return -1;
     }
 
-    fprintf(gpFile, "-> shader program linked successfully\n");
+    fprintf(gpFile, "----- Shader Program Linked Successfully -----\n");
 
+    // get MVP uniform location
     modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "uModelMatrix");
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
-    diffuseTextureUniform   = glGetUniformLocation(shaderProgramObject, "uDiffuseSampler");
-    specularTextureUniform  = glGetUniformLocation(shaderProgramObject, "specular_texture");
 
-    /* Shader data */
-    const GLfloat vertices1[] = {
-        -1.0f, 1.0f,  0.0f, // top-left
-        -1.0f, -1.0f, 0.0f, // bottom-left
-        1.0f,  -1.0f, 0.0f, // bottom-right
-        1.0f,  1.0f,  0.0f, // top-right
-    };
+    diffuseSamplerUniform = glGetUniformLocation(shaderProgramObject, "uDiffuseSampler");
 
-    const GLfloat texCoords[] = {
-        0.0f, 1.0f, // top-left
-        0.0f, 0.0f, // bottom-left
-        1.0f, 0.0f, // bottom-right
-        1.0f, 1.0f  // top-right
-    };
+    lightAmbientUniform  = glGetUniformLocation(shaderProgramObject, "uLightAmbient");
+    lightDiffuseUniform  = glGetUniformLocation(shaderProgramObject, "uLightDiffused");
+    lightSpecularUniform = glGetUniformLocation(shaderProgramObject, "uLightSpecular");
+    lightPositionUniform = glGetUniformLocation(shaderProgramObject, "uLightPosition");
 
-    // setup vao and vbo
+    materialAmbientUniform   = glGetUniformLocation(shaderProgramObject, "uMaterialAmbient");
+    materialDiffusedUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialDiffused");
+    materialSpecularUniform  = glGetUniformLocation(shaderProgramObject, "uMaterialSpecular");
+    materialShininessUniform = glGetUniformLocation(shaderProgramObject, "uMaterialShininess");
+    cameraPositionUniform    = glGetUniformLocation(shaderProgramObject, "uCameraPosition");
+
+    keyPressedUniform = glGetUniformLocation(shaderProgramObject, "uKeyPressed");
+
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
+
     glGenBuffers(1, &vboPosition);
     glBindBuffer(GL_ARRAY_BUFFER, vboPosition);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices1), vertices1, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * model.header.nVertices, model.pVertices, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &vboTexCoords);
-    glBindBuffer(GL_ARRAY_BUFFER, vboTexCoords);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(texCoords), texCoords, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    perspectiveProjectionMatrix = mat4::identity();
-    loadGLTexture(&textureFloor, "textures/earthmap1k.jpg");
-    loadGLTexture(&textureSpecular, "textures/earthspec1k.jpg");
-
-    // construct sphere data
-    GenerateSphere(1.0f, 50, 50);
-
-    // setup vao and vbo
-    glGenVertexArrays(1, &vao_sphere);
-    glBindVertexArray(vao_sphere);
-
-    glGenBuffers(1, &vbo_sphere_position);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_position);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
     glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glVertexAttribPointer(AMC_ATTRIBUTE_NORMALS, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMALS);
 
-    glGenBuffers(1, &vbo_sphere_normal);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_normal);
-    glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(float), normals.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
+    glVertexAttribPointer(AMC_ATTRIBUTE_UVS, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texel));
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_UVS);
+    glBindBuffer(GL_ARRAY_BUFFER, 0U);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glGenBuffers(1, &eboSpheres);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboSpheres);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * model.header.nIndices, model.pIndices, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &vbo_sphere_texcoord);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_texcoord);
-    glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glGenBuffers(1, &vbo_sphere_indices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_sphere_indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(float), indices.data(), GL_STATIC_DRAW);
-    glBindVertexArray(0);
+    /*
+        The order of unbinding is important --
+        If Element buffer is unbound before vertex array buffer then we are indicating OpenGl
+        that we do not intend to use element buffer
+     */
+    glBindVertexArray(0U);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    /* Depth */
-    glClearDepth(1.0f);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+    /* Enable Smooth shading */
+    glShadeModel(GL_SMOOTH);
+
+    /* Enabling Depth */
+    glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
+    glEnable(GL_DEPTH_TEST); //[Compulsory] enable depth test
+    glDepthFunc(GL_LEQUAL);  //[Compulsory] Which function to use for testing
+
+    /* Enabling face culling */
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
+    /* Reset Projection Matrix */
+    projectionMatrix = mat4::identity();
+
+    /* Texture loading */
+    textureDiffuse = loadGLTexture("./textures/earthmap1k.jpg");
+
     resize(WIN_WIDTH, WIN_HEIGHT);
-    return (0);
+
+    return 0;
 }
 
 void resize(int width, int height)
 {
-    if (height == 0)
+    if (height <= 0)
         height = 1;
 
-    glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+    projectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
 
-    perspectiveProjectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    glViewport(0, 0, width, height);
 }
-float angleEarth = 0.0f;
-void  display(void)
+
+void display(void)
 {
-    mat4 modelMatrix;
-    mat4 viewMatrix;
-    mat4 shadowMatrix;
-    mat4 mvpMatrix;
+    mat4 modelMatrix       = mat4::identity();
+    mat4 translationMatrix = mat4::identity();
+    mat4 scaleMatrix       = mat4::identity();
+    mat4 rotationMatrix    = mat4::identity();
+    mat4 viewMatrix        = mat4::identity();
+    vec3 cameraPosition    = vec3(0.0f, 0.0f, 6.0f);
+    vec3 cameraDirection   = vec3(0.0f, 0.0f, -1.0f);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     glUseProgram(shaderProgramObject);
-    glBindVertexArray(vao_sphere);
+    glBindVertexArray(vao);
     {
-        viewMatrix  = lookat(vec3(0.0f, 0.0f, 5.0f), vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
-        modelMatrix = translate(0.0f, 0.0f, 0.0f) * scale(1.0f, 1.0f, 1.0f) * rotate(-90.0f, 1.0f, 0.0f, 0.0f) * rotate(angleEarth, 0.0f, 0.0f, 1.0f);
-        glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
+        viewMatrix     = lookat(cameraPosition, cameraDirection, vec3(0.0f, 1.0f, 0.0f));
+        rotationMatrix = rotate(modelAngle, 0.0f, 1.0f, 0.0f);
+        modelMatrix    = translate(0.0f, 0.0f, 0.0f);
+        modelMatrix    = modelMatrix * rotationMatrix;
+
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
-        glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, perspectiveProjectionMatrix);
+        glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, projectionMatrix);
+        glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
+        if (bLightingEnabled == TRUE)
+        {
+            glUniform1i(keyPressedUniform, 1);
+            glUniform3fv(lightPositionUniform, 1, lightPosition);
+            glUniform3fv(cameraPositionUniform, 1, cameraPosition);
 
+            glUniform3fv(lightAmbientUniform, 1, lightAmbient);
+            glUniform3fv(lightDiffuseUniform, 1, lightDiffused);
+            glUniform3fv(lightSpecularUniform, 1, lightSpecular);
+            glUniform4fv(lightPositionUniform, 1, lightPosition);
+
+            glUniform3fv(materialAmbientUniform, 1, materialAmbient);
+            glUniform3fv(materialDiffusedUniform, 1, materialDiffused);
+            glUniform3fv(materialSpecularUniform, 1, materialSpecular);
+            glUniform1f(materialShininessUniform, materialShinyness);
+        }
+        else
+        {
+            glUniform1i(keyPressedUniform, 0);
+        }
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureFloor);
-        glUniform1i(diffuseTextureUniform, 0);
+        glBindTexture(GL_TEXTURE_2D, textureDiffuse);
+        glUniform1i(diffuseSamplerUniform, 0);
 
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, textureSpecular);
-        glUniform1i(specularTextureUniform, 1);
-
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, NULL);
+        glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
     glUseProgram(0);
-    glFlush();
+}
 
-    angleEarth += 1.0;
-    if (360.0f < angleEarth)
+void update()
+{
+    lightAngle += 0.002;
+    if (360.0f < lightAngle)
     {
-        angleEarth = angleEarth - 360.0f;
+        lightAngle -= 360.0f;
+    }
+
+    lightPosition[0] = 50.0f * cosf(lightAngle);
+    lightPosition[1] = 0.0f;
+    lightPosition[2] = 50.0f * sinf(lightAngle);
+
+    modelAngle += 0.05;
+    if (360.0f < modelAngle)
+    {
+        modelAngle -= 360.0f;
     }
 }
 
 void uninitialize(void)
 {
-    if (vao)
-    {
-        glDeleteVertexArrays(1, &vao);
-        vao = 0;
-    }
+    unloadModel(&model);
 
-    if (vboPosition)
+    if (0U != vboPosition)
     {
         glDeleteBuffers(1, &vboPosition);
-        vboPosition = 0;
+        vboPosition = 0U;
     }
 
-    if (vboTexCoords)
+    if (0U != eboSpheres)
     {
-        glDeleteBuffers(1, &vboTexCoords);
-        vboTexCoords = 0;
+        glDeleteBuffers(1, &eboSpheres);
+        eboSpheres = 0U;
     }
 
-    // release textures
-    if (0U != textureFloor)
+    if (0U != vao)
     {
-        glDeleteTextures(1, &textureFloor);
-        textureFloor = 0;
-    }
-    if (0U != textureSpecular)
-    {
-        glDeleteTextures(1, &textureSpecular);
-        textureSpecular = 0;
+        glDeleteVertexArrays(1, &vao);
+        vao = 0U;
     }
 
-    if (0U != vao_sphere)
+    if(0U != textureDiffuse)
     {
-        glDeleteVertexArrays(1, &vao_sphere);
-        vao_sphere = 0U;
+        glDeleteTextures(1, &textureDiffuse);
+        textureDiffuse = 0U;
     }
 
-    if (0U != vbo_sphere_position)
-    {
-        glDeleteBuffers(1, &vbo_sphere_position);
-        vbo_sphere_position = 0U;
-    }
-
-    if (0U != vbo_sphere_normal)
-    {
-        glDeleteBuffers(1, &vbo_sphere_normal);
-        vbo_sphere_normal = 0U;
-    }
-
-    if (0U != vbo_sphere_texcoord)
-    {
-        glDeleteBuffers(1, &vbo_sphere_texcoord);
-        vbo_sphere_texcoord = 0U;
-    }
-
-    if (0U != vbo_sphere_indices)
-    {
-        glDeleteBuffers(1, &vbo_sphere_indices);
-        vbo_sphere_indices = 0U;
-    }
-
-    // safe shader cleanup
     if (shaderProgramObject)
     {
-        GLsizei shader_count;
-        GLuint* p_shaders = NULL;
+        GLsizei nShaders;
+        GLuint* pShaders = NULL;
 
         glUseProgram(shaderProgramObject);
-        glGetProgramiv(shaderProgramObject, GL_ATTACHED_SHADERS, &shader_count);
+        glGetProgramiv(shaderProgramObject, GL_ATTACHED_SHADERS, &nShaders);
 
-        p_shaders = (GLuint*)malloc(shader_count * sizeof(GLuint));
-        memset((void*)p_shaders, 0, shader_count * sizeof(GLuint));
+        pShaders = (GLuint*)malloc(nShaders * sizeof(GLuint));
+        memset((void*)pShaders, 0, nShaders * sizeof(GLuint));
 
-        glGetAttachedShaders(shaderProgramObject, shader_count, &shader_count, p_shaders);
+        glGetAttachedShaders(shaderProgramObject, nShaders, &nShaders, pShaders);
 
-        for (GLsizei i = 0; i < shader_count; i++)
+        for (GLsizei i = 0; i < nShaders; i++)
         {
-            glDetachShader(shaderProgramObject, p_shaders[i]);
-            glDeleteShader(p_shaders[i]);
-            p_shaders[i] = 0;
+            glDetachShader(shaderProgramObject, pShaders[i]);
+            glDeleteShader(pShaders[i]);
+            pShaders[i] = 0;
         }
 
-        free(p_shaders);
-        p_shaders = NULL;
+        free(pShaders);
+        pShaders = NULL;
 
         glDeleteProgram(shaderProgramObject);
         shaderProgramObject = 0;
@@ -829,6 +867,75 @@ void uninitialize(void)
     }
 }
 
+GLuint loadGLTexture(const char* filename)
+{
+    unsigned char* data      = NULL;
+    int            width     = 0;
+    int            height    = 0;
+    int            nChannels = 0;
+    GLenum         format    = GL_RGB;
+    GLuint         texture   = 0U;
+
+    stbi_set_flip_vertically_on_load(true);
+
+    data = stbi_load(filename, &width, &height, &nChannels, 0);
+    if (data == NULL)
+    {
+        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
+    }
+    else
+    {
+        if (nChannels == 1)
+        {
+            format = GL_RED;
+        }
+        else if (nChannels == 3)
+        {
+            format = GL_RGB;
+        }
+        else if (nChannels == 4)
+        {
+            format = GL_RGBA;
+        }
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+
+        // set up texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+        // push the data to texture memory
+        glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        stbi_image_free(data);
+        data = NULL;
+        fprintf(gpFile, "Texture loaded %s, nChannels %d\n", filename, nChannels);
+    }
+    return texture;
+}
+
+void printGLInfo(void)
+{
+    GLint nExtensions = 0;
+    GLint idx         = 0;
+
+    fprintf(gpFile, "OpenGL Vendor: %s\n", glGetString(GL_VENDOR));
+    fprintf(gpFile, "OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
+    fprintf(gpFile, "OpenGL Version: %s\n", glGetString(GL_VERSION));
+    fprintf(gpFile, "OpenGL SL Version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    /* List supported extensions */
+    glGetIntegerv(GL_NUM_EXTENSIONS, &nExtensions);
+    for (idx = 0; idx < nExtensions; ++idx)
+    {
+        fprintf(gpFile, "%s\n", glGetStringi(GL_EXTENSIONS, idx));
+    }
+}
+
 GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShaderSourceCode)
 {
     GLuint programId = 0U;
@@ -846,12 +953,14 @@ GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShade
         }
         else
         {
+            fprintf(gpFile, "Failed to compile fragment shader: \n");
             glDeleteShader(vertexShaderId);
             glDeleteShader(fragmentShaderId);
         }
     }
     else
     {
+        fprintf(gpFile, "Failed to compile vertex shader: \n");
         glDeleteShader(vertexShaderId);
     }
     return programId;
@@ -874,7 +983,7 @@ GLint compileShader(unsigned int shaderId, const char* shaderSourceCode)
             if (nullptr != szInfoLog)
             {
                 glGetShaderInfoLog(shaderId, infoLogLength, nullptr, szInfoLog);
-                fprintf(gpFile, "Vertex Shader compilation error log: %s\n", szInfoLog);
+                fprintf(gpFile, "Shader compilation error log: %s\n", szInfoLog);
                 free(szInfoLog);
                 szInfoLog = nullptr;
             }
@@ -892,6 +1001,7 @@ GLint linkProgram(GLuint programId)
     glGetProgramiv(programId, GL_LINK_STATUS, &status);
     if (GL_FALSE == status)
     {
+        fprintf(gpFile, "Failed to link program \n");
         int infoLogLength = 0;
         glGetProgramiv(programId, GL_INFO_LOG_LENGTH, &infoLogLength);
         if (0 != infoLogLength)
@@ -907,119 +1017,4 @@ GLint linkProgram(GLuint programId)
         }
     }
     return status;
-}
-
-void GenerateSphere(float radius, float sectorCount, float stackCount)
-{
-    float x, y, z, xy;
-    float nx, ny, nz, lengthInv = 1.0f / radius;
-    float s, t;
-    int   t1, t2;
-
-    float sectorStep = 2.0f * M_PI / sectorCount;
-    float stackStep  = M_PI / stackCount;
-    float sectorAngle, stackAngle;
-
-    for (int i = 0; i <= stackCount; i++)
-    {
-        stackAngle = M_PI / 2.0f - i * stackStep;
-        xy         = radius * cosf(stackAngle);
-        z          = radius * sinf(stackAngle);
-
-        for (int j = 0; j <= sectorCount; j++)
-        {
-            sectorAngle = j * sectorStep;
-
-            x = xy * cosf(sectorAngle);
-            y = xy * sinf(sectorAngle);
-
-            vertices.push_back(x);
-            vertices.push_back(y);
-            vertices.push_back(z);
-
-            // normals
-            nx = x * lengthInv;
-            ny = y * lengthInv;
-            nz = z * lengthInv;
-
-            normals.push_back(nx);
-            normals.push_back(ny);
-            normals.push_back(nz);
-
-            // texcoords
-            s = (float)j / sectorCount;
-            t = (float)i / stackCount;
-
-            texcoords.push_back(s);
-            texcoords.push_back(t);
-        }
-    }
-
-    for (int i = 0; i < stackCount; i++)
-    {
-        t1 = i * (sectorCount + 1);
-        t2 = t1 + sectorCount + 1;
-
-        for (int j = 0; j < sectorCount; j++, t1++, t2++)
-        {
-            if (i != 0)
-            {
-                indices.push_back(t1);
-                indices.push_back(t2);
-                indices.push_back(t1 + 1);
-            }
-
-            if (i != (stackCount - 1))
-            {
-                indices.push_back(t1 + 1);
-                indices.push_back(t2);
-                indices.push_back(t2 + 1);
-            }
-        }
-    }
-}
-
-void loadGLTexture(GLuint* texture, const char* filename)
-{
-    unsigned char* data      = NULL;
-    int            width     = 0;
-    int            height    = 0;
-    int            nChannels = 0;
-    GLenum         format    = GL_RGB;
-
-    data = stbi_load(filename, &width, &height, &nChannels, 0);
-    if (data == NULL)
-    {
-        fprintf(gpFile, "Error : failed to load texture %s.\n", filename);
-        DestroyWindow(gHwnd);
-    }
-
-    if (nChannels == 1)
-    {
-        format = GL_RED;
-    }
-    else if (nChannels == 3)
-    {
-        format = GL_RGB;
-    }
-    else if (nChannels == 4)
-    {
-        format = GL_RGBA;
-    }
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glGenTextures(1, texture);
-    glBindTexture(GL_TEXTURE_2D, *texture);
-
-    // set up texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-    // push the data to texture memory
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLint)width, (GLint)height, 0, format, GL_UNSIGNED_BYTE, (const void*)data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(data);
-    data = NULL;
 }

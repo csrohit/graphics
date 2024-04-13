@@ -1,9 +1,6 @@
-Program for Black Screen started successfully!!!!
-OpenGL Information
-OpenGL Vendor     : NVIDIA Corporation
-OpenGL Renderer   : NVIDIA GeForce RTX 4070 Laptop GPU/PCIe/SSE2
-OpenGL Version    : 4.6.0 NVIDIA 536.99
-GLSL Version      : 4.60 NVIDIA
--> shader program linked successfully
+Program for Model Loading started successfully!!!!
+Model loaded successfully
+----- Shader Program Linked Successfully -----
+Texture loaded ./textures/earthmap1k.jpg, nChannels 3
 
 ----- Program Completed Successfully -----
