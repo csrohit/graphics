@@ -262,7 +262,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     hwnd = CreateWindowEx(
         WS_EX_APPWINDOW,                                                      // extended window style
         szAppName,                                                            // window class name
-        TEXT("Model texturing: Rohit Nimkar"),                               // caption
+        TEXT("Sphere Light & Texture: Rohit Nimkar"),                               // caption
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE, // window styles
         x,                                                                    // x co-ordinate of windows top-left corner
         y,                                                                    // y co-ordinate of windows top-left corner
