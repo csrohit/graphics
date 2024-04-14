@@ -1,6 +1,6 @@
 /**
  * @file    main.cpp
- * @brief   Model Texturing
+ * @brief   Instancing
  * @author  Rohit Nimkar
  * @date    2024-04-10
  * @version 1.1
@@ -48,7 +48,8 @@ enum
     AMC_ATTRIBUTE_POSITION = 0,
     AMC_ATTRIBUTE_COLOR,
     AMC_ATTRIBUTE_NORMALS,
-    AMC_ATTRIBUTE_UVS
+    AMC_ATTRIBUTE_UVS,
+    AMC_ATTRIBUTE_INSTANCE
 };
 
 /*--- FUnction Declaration ---*/
@@ -155,6 +156,7 @@ HGLRC           ghrc         = NULL;                      // Global handle for r
 GLuint shaderProgramObject;
 GLuint vao         = 0U;
 GLuint vboPosition = 0U;
+GLuint vboIndex    = 0U;
 GLuint eboSpheres  = 0U;
 
 /* Matrix uniforms */
@@ -195,6 +197,8 @@ GLuint textureDiffuse = 0U;
 /* Toggle uniforms */
 GLuint keyPressedUniform = 0;
 BOOL   bLightingEnabled  = FALSE;
+
+GLuint indexUniform = 0U;
 
 /* Variables */
 Model model      = {0};
@@ -262,7 +266,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInstance, LPSTR lpszCmdLin
     hwnd = CreateWindowEx(
         WS_EX_APPWINDOW,                                                      // extended window style
         szAppName,                                                            // window class name
-        TEXT("Model texturing: Rohit Nimkar"),                               // caption
+        TEXT("Instancing: Rohit Nimkar"),                                     // caption
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE, // window styles
         x,                                                                    // x co-ordinate of windows top-left corner
         y,                                                                    // y co-ordinate of windows top-left corner
@@ -457,7 +461,7 @@ void ToggleFullScreen(void)
 
 int initialize(void)
 {
-    if (0 > loadModel(&model, "rock.model"))
+    if (0 > loadModel(&model, "spherex.model"))
     {
         fprintf(gpFile, "Failed to load model sphere.model\n");
         return -1;
@@ -538,6 +542,7 @@ int initialize(void)
         "in vec3 aPosition;"
         "in vec3 aNormal;"
         "in vec2 aTexCoord;"
+        "in vec2 aOffset;"
         "\n"
         "out vec3 oTransformedNormals;"
         "out vec3 oLightDirection;"
@@ -566,6 +571,8 @@ int initialize(void)
         "        oViewerVector       = vec3(0, 0, 0);"
         "    }"
         "    gl_Position = uProjectionMatrix * eyeCoords;"
+        // "    gl_Position.x = gl_Position.x + aOffset.x;"
+        // "    gl_Position.y = gl_Position.y + aOffset.y;"
         "    oTexCoord = aTexCoord;"
         "}";
 
@@ -621,6 +628,7 @@ int initialize(void)
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "aPosition");
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMALS, "aNormal");
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_UVS, "aTexCoord");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_INSTANCE, "aOffset");
 
     if (GL_TRUE != linkProgram(shaderProgramObject))
     {
@@ -671,6 +679,28 @@ int initialize(void)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboSpheres);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * model.header.nIndices, model.pIndices, GL_STATIC_DRAW);
 
+    vec2     offsets[30];
+    uint32_t idx = 0U;
+    for (uint32_t idx = 0; idx < 30; idx++)
+    {
+        offsets[idx][0] = 30 * cosf(radians(12.0 * idx));
+        offsets[idx][1] = 30 * sinf(radians(12.0 * idx));
+    }
+
+    for (uint32_t idx = 0; idx < 180; idx++)
+    {
+        // fprintf(gpFile, "Index %u: [%.2f, %.2f]\n", idx, offsets[idx][0], offsets[idx][1]);
+        fprintf(gpFile, "Sin %u = %.2f\n", idx, 30 * cosf(radians(12.0 * idx)));
+    }
+
+    glGenBuffers(1, &vboIndex);
+    glBindBuffer(GL_ARRAY_BUFFER, vboIndex);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(offsets), offsets, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(AMC_ATTRIBUTE_INSTANCE, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(AMC_ATTRIBUTE_INSTANCE);
+    glVertexAttribDivisor(AMC_ATTRIBUTE_INSTANCE, 1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     /*
         The order of unbinding is important --
         If Element buffer is unbound before vertex array buffer then we are indicating OpenGl
@@ -721,7 +751,7 @@ void display(void)
     mat4 scaleMatrix       = mat4::identity();
     mat4 rotationMatrix    = mat4::identity();
     mat4 viewMatrix        = mat4::identity();
-    vec3 cameraPosition    = vec3(0.0f, 0.0f, 6.0f);
+    vec3 cameraPosition    = vec3(0.0f, 0.0f, 5.0f);
     vec3 cameraDirection   = vec3(0.0f, 0.0f, -1.0f);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -731,12 +761,14 @@ void display(void)
     {
         viewMatrix     = lookat(cameraPosition, cameraDirection, vec3(0.0f, 1.0f, 0.0f));
         rotationMatrix = rotate(modelAngle, 0.0f, 1.0f, 0.0f);
-        modelMatrix    = translate(0.0f, -2.0f, 0.0f);
-        modelMatrix    = modelMatrix * rotationMatrix;
+        // scaleMatrix = scale(.7f, .7f, .7f);
+        modelMatrix = translate(0.0f, 0.0f, 0.0f);
+        modelMatrix = modelMatrix * rotationMatrix * scaleMatrix;
 
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
         glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, projectionMatrix);
         glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
+        // glUniform4fv(indexUniform, 1, offsets);
         if (bLightingEnabled == TRUE)
         {
             glUniform1i(keyPressedUniform, 1);
@@ -760,7 +792,7 @@ void display(void)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureDiffuse);
         glUniform1i(diffuseSamplerUniform, 0);
-
+        // glDrawElementsInstanced(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0, 30);
         glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
@@ -775,9 +807,12 @@ void update()
         lightAngle -= 360.0f;
     }
 
-    lightPosition[0] = 50.0f * cosf(lightAngle);
-    lightPosition[1] = 0.0f;
-    lightPosition[2] = 50.0f * sinf(lightAngle);
+    // lightPosition[0] = 50.0f * cosf(lightAngle) + 30.0f;
+    // lightPosition[1] = 0.0f;
+    // lightPosition[2] = 10.0f * sinf(lightAngle) - 50.0f;
+    lightPosition[0] = 0.0f;
+    lightPosition[1] = 5.0f;
+    lightPosition[2] = 0.0f;
 
     modelAngle += 0.005;
     if (360.0f < modelAngle)
