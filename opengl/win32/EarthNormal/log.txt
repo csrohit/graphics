@@ -254,6 +254,5 @@ Texture loaded textures/day.jpg, nChannels 3
 Texture loaded textures/normal.png, nChannels 3
 Texture loaded textures/specular.png, nChannels 1
 Texture loaded textures/clouds.jpg, nChannels 3
-F/f key pressed and entered into full screen successfully!!!!
 
 ----- Program Completed Successfully -----
