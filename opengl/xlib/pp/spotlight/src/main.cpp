@@ -429,11 +429,14 @@ int initialize()
     }
 
     fprintf(gpFile, "Model loaded successfully\n");
+    fprintf(gpFile, "Model loaded successfully\n");
 
     GLint result = 0; // variable to get value returned by APIS
     glxContext   = glXCreateContext(dpy, pVisualInfo, nullptr, GL_TRUE);
+    fprintf(gpFile, "12121212Model lfasfasasfoaded successfully\n");
     glXMakeCurrent(dpy, window, glxContext);
 
+    fprintf(gpFile, "Model lfasfasasfoaded successfully\n");
     /* initialize glew */
     glewExperimental = true;
     if (glewInit() != GLEW_OK)
