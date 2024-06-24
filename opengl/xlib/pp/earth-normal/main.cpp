@@ -422,7 +422,7 @@ int main()
 
 int initialize()
 {
-    if (0 > loadModel(&model, "sphere.model"))
+    if (0 > loadModel(&model, "plane.model"))
     {
         fprintf(gpFile, "Failed to load model sphere.model\n");
         return -1;
