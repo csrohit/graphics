@@ -446,16 +446,15 @@ int initialize()
         "    vec4 ePosition       = eyeMatrix * aPosition;"
         "    mat3 normalMatrix    = mat3(transpose(inverse(eyeMatrix)));"
         "    vec3 eNormal         = normalize(normalMatrix * aNormal);"
-        "    vec3 eLightDirection = normalize(light.position - vec3(ePosition));"
-
-
-       "    vec3 eReflectionDirection = reflect(-light.direction, eNormal);"
-       "    vec3 eCameraDirection     = normalize(-ePosition.xyz);"
-       "\n"
-       "    vec4 ambient  = vec4(light.ambient, 1.0f) * material.ambient;"
-       "    vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(eLightDirection, eNormal), 0.0f);"
-       "    vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
-       "    oColor = ambient + diffuse + specular;"
+        "    vec3 eLightDirection = normalize(-light.direction);"
+        "\n"
+        "    vec3 eReflectionDirection = reflect(eLightDirection, eNormal);"
+        "    vec3 eCameraDirection     = normalize(-ePosition.xyz);"
+        "\n"
+        "    vec4 ambient  = vec4(light.ambient, 1.0f) * material.ambient;"
+        "    vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(eLightDirection, eNormal), 0.0f);"
+        "    vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
+        "    oColor = ambient + diffuse + specular;"
         "\n"
         "    gl_Position = uProjectionMatrix * ePosition;"
         "}";
@@ -495,14 +494,15 @@ int initialize()
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
 
-    lightUniform.ambient = glGetUniformLocation(shaderProgramObject, "light.ambient");
-    lightUniform.diffuse  = glGetUniformLocation(shaderProgramObject, "light.diffuse");
-    lightUniform.specular = glGetUniformLocation(shaderProgramObject, "light.specular");
-    lightUniform.position = glGetUniformLocation(shaderProgramObject, "light.position");
+    lightUniform.ambient   = glGetUniformLocation(shaderProgramObject, "light.ambient");
+    lightUniform.diffuse   = glGetUniformLocation(shaderProgramObject, "light.diffuse");
+    lightUniform.specular  = glGetUniformLocation(shaderProgramObject, "light.specular");
+    lightUniform.position  = glGetUniformLocation(shaderProgramObject, "light.position");
+    lightUniform.direction = glGetUniformLocation(shaderProgramObject, "light.direction");
 
-    materialUniform.ambient = glGetUniformLocation(shaderProgramObject, "material.ambient");
-    materialUniform.diffuse = glGetUniformLocation(shaderProgramObject, "material.diffuse");
-    materialUniform.specular = glGetUniformLocation(shaderProgramObject, "material.specular");
+    materialUniform.ambient   = glGetUniformLocation(shaderProgramObject, "material.ambient");
+    materialUniform.diffuse   = glGetUniformLocation(shaderProgramObject, "material.diffuse");
+    materialUniform.specular  = glGetUniformLocation(shaderProgramObject, "material.specular");
     materialUniform.shininess = glGetUniformLocation(shaderProgramObject, "material.shininess");
 
     /* Model Buffers */
@@ -539,6 +539,7 @@ int initialize()
     light.setDiffuse(vec3(1.0f, 1.0f, 1.0f));
     light.setSpecular(vec3(1.0f, 1.0f, 1.0f));
     light.setPosition(vec3(100.0f, 100.0f, 100.0f));
+    light.setDirection(vec3(-1.2f, -1.0f, 0.0f));
 
     material.setDiffuse(vec4(1.0f, 1.0f, 1.0f, 1.0f));
     material.setAmbient(vec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -579,7 +580,7 @@ void display()
     mat4 translationMatrix = mat4::identity();
     mat4 scaleMatrix       = mat4::identity();
     mat4 viewMatrix        = mat4::identity();
-    vec3 cameraPosition    = vec3(15.0f, 5.0f, 0.0f);
+    vec3 cameraPosition    = vec3(0.0f, 5.0f, 10.0f);
     vec3 cameaDirection    = vec3(0.0f, 0.0f, 0.0f);
 
     glUseProgram(shaderProgramObject);
@@ -597,6 +598,7 @@ void display()
         glUniform3fv(lightUniform.diffuse, 1, light.getDiffuse());
         glUniform3fv(lightUniform.specular, 1, light.getSpecular());
         glUniform3fv(lightUniform.position, 1, light.getPosition());
+        glUniform3fv(lightUniform.direction, 1, light.getDirection());
 
         glUniform4fv(materialUniform.ambient, 1, material.getAmbient());
         glUniform4fv(materialUniform.diffuse, 1, material.getDiffuse());
