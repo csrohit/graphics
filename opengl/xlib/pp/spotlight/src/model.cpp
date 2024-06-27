@@ -1,8 +1,8 @@
-#include "load.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "model.h"
 #ifdef EXPORT
 int main(int argc, char* argv[])
 {
@@ -359,12 +359,12 @@ void unloadModel(struct Model* pModel)
 
 int processMaterialFile(char* filename, struct Model* pModel)
 {
-    char             buff[128];
-    int32_t          nMaterials = 0;
-    struct Material* pMaterial  = NULL;
-    struct Material* pMaterials = NULL;
-    int32_t          idx        = 0U;
-    FILE*            pFile      = NULL;
+    char                  buff[128];
+    int32_t               nMaterials = 0;
+    struct MaterialModel* pMaterial  = NULL;
+    struct MaterialModel* pMaterials = NULL;
+    int32_t               idx        = 0U;
+    FILE*                 pFile      = NULL;
 
     pFile = fopen(filename, "r");
     if (NULL == pFile)
@@ -394,7 +394,7 @@ int processMaterialFile(char* filename, struct Model* pModel)
         }
     }
     // pModel->nMaterials = nMaterials;
-    pMaterials = (struct Material*)malloc(sizeof(struct Material) * nMaterials);
+    pMaterials = (struct MaterialModel*)malloc(sizeof(struct MaterialModel) * nMaterials);
 
     /* reset to beginning of file */
     (void)fseek(pFile, 0L, SEEK_SET);
@@ -521,7 +521,7 @@ int processMaterialFile(char* filename, struct Model* pModel)
     fclose(pFile);
     return (0);
 }
-void printMaterial(struct Material* pMaterial)
+void printMaterial(struct MaterialModel* pMaterial)
 {
     fprintf(stdout, "Name: %s\n", pMaterial->name);
     fprintf(stdout, "Shininess: %f\n", pMaterial->shininess);
@@ -555,13 +555,13 @@ void printMaterial(struct Material* pMaterial)
 //     return (-1);
 // }
 
-void deleteMaterials(struct Material* pMaterials, int nMaterials)
+void deleteMaterials(struct MaterialModel* pMaterials, int nMaterials)
 {
     if (NULL == pMaterials)
     {
         return;
     }
-    struct Material* pMaterial;
+    struct MaterialModel* pMaterial;
     for (int32_t idx = 0U; idx < nMaterials; ++idx)
     {
         pMaterial = pMaterials + idx;

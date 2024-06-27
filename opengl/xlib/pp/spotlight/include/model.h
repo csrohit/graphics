@@ -1,5 +1,5 @@
-#ifndef LOAD_H
-#define LOAD_H
+#ifndef MODEL_H
+#define MODEL_H
 #include <stdint.h>
 #include <stddef.h>
 
@@ -61,7 +61,7 @@ typedef struct Model
     uint32_t* pIndices;
 } Model;
 
-struct Material
+struct MaterialModel
 {
     /*
      * @note:
@@ -100,9 +100,18 @@ struct Material
     char* texturePath;
 };
 
+struct ModelUniform
+{
+    unsigned int vao;
+    unsigned int positions;
+    unsigned int normals;
+    unsigned int texels;
+    unsigned int ebo;
+};
+
 int        processMaterialFile(char* pFile, struct Model* pModel);
-void       printMaterial(struct Material* pMaterial);
-void       deleteMaterials(struct Material* pMaterials, int nMaterials);
+void       printMaterial(struct MaterialModel* pMaterial);
+void       deleteMaterials(struct MaterialModel* pMaterials, int nMaterials);
 int        readObj(char* filename, Model* pModel);
 void       unloadModel(struct Model* pModel);
 void       printModel(struct Model* pModel);
@@ -110,4 +119,4 @@ static int findMaterial(struct Model* pModel, char* name);
 int        exportModel(Model* pModel, const char* pFileName);
 int        loadModel(Model* pModel, const char* pFileName);
 
-#endif // !LOAD_H
+#endif // !MODEL_H

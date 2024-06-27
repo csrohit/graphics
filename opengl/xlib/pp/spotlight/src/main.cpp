@@ -28,13 +28,15 @@
 #include <vector>
 
 /*--- Program headers ---*/
+#include "light.h"
+#include "material.h"
 #include "vmath.h"
 using namespace vmath;
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include "load.h"
+#include "model.h"
 
 /*--- Macro definitions ---*/
 #define gpFILE     stdout
@@ -123,7 +125,6 @@ GLuint loadShaders(const char* vertexSource, const char* fragmentSource);
  */
 GLuint loadGLTexture(const char* filename);
 
-void GenerateSphere(float radius, float sectorCount, float stackCount);
 /* Windowing related variables */
 Display*     dpy         = nullptr; // connection to server
 Colormap     colormap    = 0UL;
@@ -138,10 +139,6 @@ Bool         bFullscreen = False;
 /* OpenGL identifiers */
 GLuint shaderProgramObject = 0U;
 
-GLuint vao         = 0U;
-GLuint vboPosition = 0U;
-GLuint eboSpheres  = 0U;
-
 /* Matrix uniforms */
 GLuint modelMatrixUniform      = 0U;
 GLuint viewMatrixUniform       = 0U;
@@ -151,51 +148,21 @@ GLuint viewPosUniform          = 0U;
 mat4 projectionMatrix = {};
 
 /* Light uniforms */
-GLuint lightAmbientUniform  = 0;
-GLuint lightDiffuseUniform  = 0;
-GLuint lightSpecularUniform = 0;
-GLuint lightPositionUniform = 0;
-
-GLfloat lightAmbient[]  = {0.1f, 0.1f, 0.1f, 1.0f};       // grey ambient light
-GLfloat lightDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f};       // white diffused light
-GLfloat lightSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f};       // specular color
-GLfloat lightPosition[] = {100.0f, 100.0f, 100.0f, 1.0f}; // position of light
+Light        light        = {};
+LightUniform lightUniform = {};
 
 /* Material uniforms */
-GLuint materialAmbientUniform   = 0;
-GLuint materialSpecularUniform  = 0;
-GLuint materialDiffusedUniform  = 0;
-GLuint materialShininessUniform = 0;
-
-GLfloat materialAmbient[]  = {0.2f, 0.2f, 0.2f, 0.2f}; // ambient reflectance
-GLfloat materialDiffused[] = {1.0f, 1.0f, 1.0f, 1.0f}; // diffuse reflectance
-GLfloat materialSpecular[] = {1.0f, 1.0f, 1.0f, 1.0f}; // specular reflectance
-GLfloat materialShinyness  = 128.0f;                   // concentration of specular component
-
-GLuint diffuseTextureUniform;
-GLuint specularTextureUniform;
-GLuint normalTextureUniform;
-GLuint textureDiffuse;
-GLuint textureSpecular;
-GLuint textureNormal;
+Material        material        = {};
+MaterialUniform materialUniform = {};
 
 /* Functional uniforms */
-GLuint keyPressedUniform   = 0;
-Bool   bLightingEnabled    = False;
-Bool   bAnimationEnabled   = False;
-GLuint vao_sphere          = 0U;
-GLuint vbo_sphere_position = 0U;
-GLuint vbo_sphere_normal   = 0U;
-GLuint vbo_sphere_texcoord = 0U;
-GLuint vbo_sphere_indices  = 0U;
+Bool bAnimationEnabled = False;
 
-std::vector<float> vertices;
-std::vector<float> normals;
-std::vector<float> texcoords;
-std::vector<int>   indices;
+/* Model */
+Model        model        = {0};
+ModelUniform modelUniform = {};
 
 /* Variables */
-Model model         = {0};
 float rotationAngle = 0.0f;
 
 int main()
@@ -250,10 +217,11 @@ int main()
     windowAttributes.border_pixel      = 0UL;
     windowAttributes.background_pixel  = XBlackPixel(dpy, pVisualInfo->screen);
     windowAttributes.background_pixmap = 0UL;
-    windowAttributes.colormap          = XCreateColormap(dpy,                                  // pointer to display
-                                                         RootWindow(dpy, pVisualInfo->screen), // window
-                                                         pVisualInfo->visual,                  // pointer to visual
-                                                         AllocNone);                           // do not allocate memory, won't need to use this later
+    windowAttributes.colormap          = XCreateColormap(
+        dpy,                                  // pointer to display
+        RootWindow(dpy, pVisualInfo->screen), // window
+        pVisualInfo->visual,                  // pointer to visual
+        AllocNone);                           // do not allocate memory, won't need to use this later
     /* Step6: assign this colormap to global colormap */
     colormap = windowAttributes.colormap;
 
@@ -261,18 +229,19 @@ int main()
     styleMask = CWBorderPixel | CWBackPixel | CWColormap | CWEventMask;
 
     /* Step8: create window */
-    window = XCreateWindow(dpy,                                  // pointer to display
-                           RootWindow(dpy, pVisualInfo->screen), // parent window [Desktop]
-                           0,                                    // x
-                           0,                                    // y
-                           WIN_WIDTH,                            // window width
-                           WIN_HEIGHT,                           // window dimentions
-                           0,                                    // border width
-                           pVisualInfo->depth,                   // depth
-                           InputOutput,                          // class of window
-                           pVisualInfo->visual,                  // visual
-                           styleMask,                            // which styles to be applied
-                           &windowAttributes                     // window attributes
+    window = XCreateWindow(
+        dpy,                                  // pointer to display
+        RootWindow(dpy, pVisualInfo->screen), // parent window [Desktop]
+        0,                                    // x
+        0,                                    // y
+        WIN_WIDTH,                            // window width
+        WIN_HEIGHT,                           // window dimentions
+        0,                                    // border width
+        pVisualInfo->depth,                   // depth
+        InputOutput,                          // class of window
+        pVisualInfo->visual,                  // visual
+        styleMask,                            // which styles to be applied
+        &windowAttributes                     // window attributes
     );
 
     if (0UL == window)
@@ -358,20 +327,6 @@ int main()
                             toggleFullscreen();
                             break;
                         }
-                        case 'L':
-                        case 'l':
-                        {
-                            if (bLightingEnabled)
-                            {
-                                bLightingEnabled = False;
-                            }
-                            else
-                            {
-                                bLightingEnabled = True;
-                            }
-                            break;
-                        }
-                        break;
                         case 'A':
                         case 'a':
                         {
@@ -429,14 +384,13 @@ int initialize()
     }
 
     fprintf(gpFile, "Model loaded successfully\n");
-    fprintf(gpFile, "Model loaded successfully\n");
 
     GLint result = 0; // variable to get value returned by APIS
     glxContext   = glXCreateContext(dpy, pVisualInfo, nullptr, GL_TRUE);
-    fprintf(gpFile, "12121212Model lfasfasasfoaded successfully\n");
     glXMakeCurrent(dpy, window, glxContext);
 
-    fprintf(gpFile, "Model lfasfasasfoaded successfully\n");
+    fprintf(gpFile, "Model loaded successfully\n");
+
     /* initialize glew */
     glewExperimental = true;
     if (glewInit() != GLEW_OK)
@@ -452,25 +406,69 @@ int initialize()
     fprintf(gpFILE, "%-20s:%s\n", "GL Shading Language", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     /* Program related variables */
+
     const GLchar* vertexShaderSource =
-        "#version 450 core"
+        "#version 460 core"
         "\n"
-        "in vec3 aPosition;"
+        "struct Material"
+        "{"
+        "    vec4  ambient;"
+        "    vec4  diffuse;"
+        "    vec4  specular;"
+        "    float shininess;"
+        "};"
+        "\n"
+        "struct Light"
+        "{"
+        "    vec3 position;"
+        "    vec3 direction;"
+        "    vec3 ambient;"
+        "    vec3 diffuse;"
+        "    vec3 specular;"
+        "};"
+        "\n"
+        "in  vec4 aPosition;"
+        "in  vec3 aNormal;"
+        "out vec4 oColor;"
+        "\n"
         "uniform mat4 uModelMatrix;"
         "uniform mat4 uViewMatrix;"
         "uniform mat4 uProjectionMatrix;"
+        "\n"
+        "uniform vec4 uLightPosition;"
+        "uniform Light light;"
+        "\n"
+        "uniform Material material;"
+        "\n"
         "void main(void)"
         "{"
-        "   gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0f);"
+        "    mat4 eyeMatrix       = uViewMatrix * uModelMatrix;"
+        "    vec4 ePosition       = eyeMatrix * aPosition;"
+        "    mat3 normalMatrix    = mat3(transpose(inverse(eyeMatrix)));"
+        "    vec3 eNormal         = normalize(normalMatrix * aNormal);"
+        "    vec3 eLightDirection = normalize(light.position - vec3(ePosition));"
+
+
+       "    vec3 eReflectionDirection = reflect(-light.direction, eNormal);"
+       "    vec3 eCameraDirection     = normalize(-ePosition.xyz);"
+       "\n"
+       "    vec4 ambient  = vec4(light.ambient, 1.0f) * material.ambient;"
+       "    vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(eLightDirection, eNormal), 0.0f);"
+       "    vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
+       "    oColor = ambient + diffuse + specular;"
+        "\n"
+        "    gl_Position = uProjectionMatrix * ePosition;"
         "}";
 
     const GLchar* fragmentShaderSource =
-        "#version 450 core"
+        "#version 460 core"
         "\n"
+        "in  vec4 oColor;"
         "out vec4 FragColor;"
+        "\n"
         "void main(void)"
         "{"
-        "   FragColor = vec4(1.0f, 1.0f, 1.0f , 1.0f);"
+        "    FragColor = oColor;"
         "}";
 
     shaderProgramObject = loadShaders(vertexShaderSource, fragmentShaderSource);
@@ -482,25 +480,37 @@ int initialize()
 
     /* Step 7: Bind attaribute location with shader program object */
     glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_POSITION, "aPosition");
+    glBindAttribLocation(shaderProgramObject, AMC_ATTRIBUTE_NORMALS, "aNormal");
 
-    // Create and compile our GLSL program from the shaders
+    /* Create and compile our GLSL program from the shaders */
     if (0 == linkProgram(shaderProgramObject))
     {
         fprintf(gpFILE, "[%s] Failed to link program\n", __func__);
         uninitialize();
-        exit(1);
+        return -1;
     }
     fprintf(gpFILE, "[%s] Program linked successfully\n", __func__);
+
     modelMatrixUniform      = glGetUniformLocation(shaderProgramObject, "uModelMatrix");
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
 
-    /* Cube */
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    lightUniform.ambient = glGetUniformLocation(shaderProgramObject, "light.ambient");
+    lightUniform.diffuse  = glGetUniformLocation(shaderProgramObject, "light.diffuse");
+    lightUniform.specular = glGetUniformLocation(shaderProgramObject, "light.specular");
+    lightUniform.position = glGetUniformLocation(shaderProgramObject, "light.position");
 
-    glGenBuffers(1, &vboPosition);
-    glBindBuffer(GL_ARRAY_BUFFER, vboPosition);
+    materialUniform.ambient = glGetUniformLocation(shaderProgramObject, "material.ambient");
+    materialUniform.diffuse = glGetUniformLocation(shaderProgramObject, "material.diffuse");
+    materialUniform.specular = glGetUniformLocation(shaderProgramObject, "material.specular");
+    materialUniform.shininess = glGetUniformLocation(shaderProgramObject, "material.shininess");
+
+    /* Model Buffers */
+    glGenVertexArrays(1, &modelUniform.vao);
+    glBindVertexArray(modelUniform.vao);
+
+    glGenBuffers(1, &modelUniform.positions);
+    glBindBuffer(GL_ARRAY_BUFFER, modelUniform.positions);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * model.header.nVertices, model.pVertices, GL_STATIC_DRAW);
 
     glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
@@ -513,8 +523,8 @@ int initialize()
     glEnableVertexAttribArray(AMC_ATTRIBUTE_UVS);
     glBindBuffer(GL_ARRAY_BUFFER, 0U);
 
-    glGenBuffers(1, &eboSpheres);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboSpheres);
+    glGenBuffers(1, &modelUniform.ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, modelUniform.ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * model.header.nIndices, model.pIndices, GL_STATIC_DRAW);
 
     /*
@@ -522,54 +532,27 @@ int initialize()
         If Element buffer is unbound before vertex array buffer then we are indicating OpenGl
         that we do not intend to use element buffer
      */
-    glBindVertexArray(0U);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    // setup vao and vbo
-    glGenVertexArrays(1, &vao_sphere);
-    glBindVertexArray(vao_sphere);
-
-    glGenBuffers(1, &vbo_sphere_position);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_position);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glGenBuffers(1, &vbo_sphere_normal);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_normal);
-    glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(float), normals.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_NORMALS, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMALS);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glGenBuffers(1, &vbo_sphere_texcoord);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_sphere_texcoord);
-    glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(AMC_ATTRIBUTE_UVS, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_UVS);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glGenBuffers(1, &vbo_sphere_indices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_sphere_indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(float), indices.data(), GL_STATIC_DRAW);
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
+    light.setAmbient(vec3(0.1f, 0.1f, 0.1f));
+    light.setDiffuse(vec3(1.0f, 1.0f, 1.0f));
+    light.setSpecular(vec3(1.0f, 1.0f, 1.0f));
+    light.setPosition(vec3(100.0f, 100.0f, 100.0f));
+
+    material.setDiffuse(vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    material.setAmbient(vec4(0.0f, 0.0f, 0.0f, 0.0f));
+    material.setSpecular(vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    material.setShininess(50.0f);
 
     /* Enabling Depth */
     glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
     glEnable(GL_DEPTH_TEST); //[Compulsory] enable depth test
     glDepthFunc(GL_LEQUAL);  //[Compulsory] Which function to use for testing
 
-    // glEnable(GL_CULL_FACE);
-    // glCullFace(GL_BACK);
-    // glShadeModel(GL_SMOOTH);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glShadeModel(GL_SMOOTH);
 
     /* warm-up resize */
     XWindowAttributes xattr = {};
@@ -592,15 +575,15 @@ void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    vmath::mat4 modelMatrix       = vmath::mat4::identity();
-    vmath::mat4 translationMatrix = vmath::mat4::identity();
-    vmath::mat4 scaleMatrix       = vmath::mat4::identity();
-    vmath::mat4 viewMatrix        = vmath::mat4::identity();
-    vec3        cameraPosition    = vec3(15.0f, 5.0f, 0.0f);
-    vec3        cameaDirection    = vec3(0.0f, 0.0f, 0.0f);
+    mat4 modelMatrix       = mat4::identity();
+    mat4 translationMatrix = mat4::identity();
+    mat4 scaleMatrix       = mat4::identity();
+    mat4 viewMatrix        = mat4::identity();
+    vec3 cameraPosition    = vec3(15.0f, 5.0f, 0.0f);
+    vec3 cameaDirection    = vec3(0.0f, 0.0f, 0.0f);
 
     glUseProgram(shaderProgramObject);
-    glBindVertexArray(vao);
+    glBindVertexArray(modelUniform.vao);
     {
         viewMatrix = lookat(cameraPosition, cameaDirection, vec3(0.0f, 1.0f, 0.0f));
 
@@ -610,7 +593,16 @@ void display()
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
         glUniformMatrix4fv(projectionMatrixUniform, 1, GL_FALSE, projectionMatrix);
 
-        // glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        glUniform3fv(lightUniform.ambient, 1, light.getAmbient());
+        glUniform3fv(lightUniform.diffuse, 1, light.getDiffuse());
+        glUniform3fv(lightUniform.specular, 1, light.getSpecular());
+        glUniform3fv(lightUniform.position, 1, light.getPosition());
+
+        glUniform4fv(materialUniform.ambient, 1, material.getAmbient());
+        glUniform4fv(materialUniform.diffuse, 1, material.getDiffuse());
+        glUniform4fv(materialUniform.specular, 1, material.getSpecular());
+        glUniform1f(materialUniform.shininess, material.getShininess());
+
         glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
@@ -647,7 +639,7 @@ void toggleFullscreen(void)
     event.xclient.data.l[0]    = 2;
     event.xclient.data.l[1]    = wmStateFullscreen;
 
-    /* Step4: send event*/
+    /* Step4: send event */
     XSendEvent(
         dpy,                                  // pointer to display
         RootWindow(dpy, pVisualInfo->screen), // root window of application
@@ -656,7 +648,7 @@ void toggleFullscreen(void)
         &event                                // pointer to event
     );
 
-    /* Step4: */
+    /* Step4: Update state */
     bFullscreen = !bFullscreen;
 }
 
@@ -692,41 +684,23 @@ void uninitialize()
         shaderProgramObject = 0U;
     }
 
-    /* cube */
-    if (0U != vboPosition)
+    /* Release Buffer objects */
+    if (0U != modelUniform.positions)
     {
-        glDeleteBuffers(1, &vboPosition);
-        vboPosition = 0U;
+        glDeleteBuffers(1, &modelUniform.positions);
+        modelUniform.positions = 0U;
     }
 
-    if (0U != eboSpheres)
+    if (0U != modelUniform.ebo)
     {
-        glDeleteBuffers(1, &eboSpheres);
-        eboSpheres = 0U;
+        glDeleteBuffers(1, &modelUniform.ebo);
+        modelUniform.ebo = 0U;
     }
 
-    if (0U != textureDiffuse)
+    if (0U != modelUniform.vao)
     {
-        glDeleteTextures(1, &textureDiffuse);
-        textureDiffuse = 0U;
-    }
-
-    if (0U != textureSpecular)
-    {
-        glDeleteTextures(1, &textureSpecular);
-        textureSpecular = 0U;
-    }
-
-    if (0U != textureNormal)
-    {
-        glDeleteTextures(1, &textureNormal);
-        textureNormal = 0U;
-    }
-
-    if (0U != vao)
-    {
-        glDeleteVertexArrays(1, &vao);
-        vao = 0U;
+        glDeleteVertexArrays(1, &modelUniform.vao);
+        modelUniform.vao = 0U;
     }
 
     currentGLXContext = glXGetCurrentContext();
@@ -793,6 +767,7 @@ GLuint loadShaders(const char* vertexShaderSourceCode, const char* fragmentShade
         fprintf(gpFile, "Vertex shader compilation failed\n");
         glDeleteShader(vertexShaderId);
     }
+
     return programId;
 }
 
@@ -819,6 +794,7 @@ GLint compileShader(unsigned int shaderId, const char* shaderSourceCode)
             }
         }
     }
+
     return status;
 }
 
@@ -896,75 +872,6 @@ GLuint loadGLTexture(const char* filename)
         data = nullptr;
         fprintf(gpFile, "Texture loaded %s, nChannels %d\n", filename, nChannels);
     }
+
     return texture;
-}
-
-void GenerateSphere(float radius, float sectorCount, float stackCount)
-{
-    float x, y, z, xy;
-    float nx, ny, nz, lengthInv = 1.0f / radius;
-    float s, t;
-    int   t1, t2;
-
-    float sectorStep = 2.0f * M_PI / sectorCount;
-    float stackStep  = M_PI / stackCount;
-    float sectorAngle, stackAngle;
-
-    for (int i = 0; i <= stackCount; i++)
-    {
-        stackAngle = M_PI / 2.0f - i * stackStep;
-        xy         = radius * cosf(stackAngle);
-        z          = radius * sinf(stackAngle);
-
-        for (int j = 0; j <= sectorCount; j++)
-        {
-            sectorAngle = j * sectorStep;
-
-            x = xy * cosf(sectorAngle);
-            y = xy * sinf(sectorAngle);
-
-            vertices.push_back(x);
-            vertices.push_back(y);
-            vertices.push_back(z);
-
-            // normals
-            nx = x * lengthInv;
-            ny = y * lengthInv;
-            nz = z * lengthInv;
-
-            normals.push_back(nx);
-            normals.push_back(ny);
-            normals.push_back(nz);
-
-            // texcoords
-            s = (float)j / sectorCount;
-            t = (float)i / stackCount;
-
-            texcoords.push_back(s);
-            texcoords.push_back(t);
-        }
-    }
-
-    for (int i = 0; i < stackCount; i++)
-    {
-        t1 = i * (sectorCount + 1);
-        t2 = t1 + sectorCount + 1;
-
-        for (int j = 0; j < sectorCount; j++, t1++, t2++)
-        {
-            if (i != 0)
-            {
-                indices.push_back(t1);
-                indices.push_back(t2);
-                indices.push_back(t1 + 1);
-            }
-
-            if (i != (stackCount - 1))
-            {
-                indices.push_back(t1 + 1);
-                indices.push_back(t2);
-                indices.push_back(t2 + 1);
-            }
-        }
-    }
 }
