@@ -23,6 +23,11 @@ struct Light
     vec3 ambient;   /**< Ambient component of light */
     vec3 diffuse;   /**< Diffuse component of light */
     vec3 specular;  /**< Specular component of light */
+    float constant;
+    float linear;
+    float quadratic;
+    float cutOff;
+    float outerCutOff;
 
     inline void setAmbient(const vec3 val)
     {
@@ -83,6 +88,56 @@ struct Light
     {
         return position;
     }
+
+    inline void setConstantAttenuation(const float val)
+    {
+        constant = val;
+    }
+
+    inline float getConstantAttenuation()
+    {
+        return constant;
+    }
+
+    inline void setLinearAttenuation(const float val)
+    {
+        linear = val;
+    }
+
+    inline float getLinearAttenuation()
+    {
+        return linear;
+    }
+
+    inline void setQuadraticAttenuation(const float val)
+    {
+        quadratic = val;
+    }
+
+    inline float getQuadraticAttenuation()
+    {
+        return quadratic;
+    }
+
+    inline void SetOuterCutOff(const float val)
+    {
+        outerCutOff = val;
+    }
+
+    inline float getOuterCutOff()
+    {
+        return outerCutOff;
+    }
+
+    inline void SetCutOff(const float val)
+    {
+        cutOff = val;
+    }
+
+    inline float getCutOff()
+    {
+        return cutOff;
+    }
 };
 
 struct LightUniform
@@ -92,6 +147,12 @@ struct LightUniform
     unsigned int ambient;   /**< Ambient uniform of light */
     unsigned int diffuse;   /**< Diffuse uniform of light */
     unsigned int specular;  /**< Specular uniform of light */
+    unsigned int constant;  /**< Specular uniform of light */
+    unsigned int linear;    /**< Specular uniform of light */
+    unsigned int quadratic; /**< Specular uniform of light */
+    unsigned int cutOff; /**< Specular uniform of light */
+    unsigned int outerCutOff; /**< Specular uniform of light */
+
 };
 
 #endif // !LIGHT_H

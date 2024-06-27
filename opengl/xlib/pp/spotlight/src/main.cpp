@@ -136,6 +136,8 @@ GLboolean    shouldDraw  = false;
 FILE*        gpFile      = stdout;
 Bool         bFullscreen = False;
 
+float debug = 0.0f;
+
 /* OpenGL identifiers */
 GLuint shaderProgramObject = 0U;
 
@@ -143,7 +145,7 @@ GLuint shaderProgramObject = 0U;
 GLuint modelMatrixUniform      = 0U;
 GLuint viewMatrixUniform       = 0U;
 GLuint projectionMatrixUniform = 0U;
-GLuint viewPosUniform          = 0U;
+GLuint cameraPositionUniform   = 0U;
 
 mat4 projectionMatrix = {};
 
@@ -341,6 +343,17 @@ int main()
                             break;
                         }
 
+                        case 'S':
+                        {
+                            debug -= 0.05;
+                            break;
+                        }
+                        case 's':
+                        {
+                            debug += 0.05;
+                            break;
+                        }
+
                         default: break;
                     }
                     break;
@@ -410,6 +423,28 @@ int initialize()
     const GLchar* vertexShaderSource =
         "#version 460 core"
         "\n"
+        "in  vec4 aPosition;"
+        "in  vec3 aNormal;"
+        "out vec3 oNormal;"
+        "out vec3 wPosition;"
+        "\n"
+        "uniform mat4 uModelMatrix;"
+        "uniform mat4 uViewMatrix;"
+        "uniform mat4 uProjectionMatrix;"
+        "\n"
+        "void main(void)"
+        "{"
+        "    mat4 eyeMatrix       = uViewMatrix * uModelMatrix;"
+        "    mat3 normalMatrix    = mat3(transpose(inverse(eyeMatrix)));"
+        "\n"
+        "    oNormal     = normalize(normalMatrix * aNormal);"
+        "    wPosition   = vec3(uModelMatrix * aPosition);"
+        "    gl_Position = uProjectionMatrix * eyeMatrix * aPosition;"
+        "}";
+
+    const GLchar* fragmentShaderSource =
+        "#version 460 core"
+        "\n"
         "struct Material"
         "{"
         "    vec4  ambient;"
@@ -420,54 +455,47 @@ int initialize()
         "\n"
         "struct Light"
         "{"
-        "    vec3 position;"
-        "    vec3 direction;"
-        "    vec3 ambient;"
-        "    vec3 diffuse;"
-        "    vec3 specular;"
+        "    vec3  position;"
+        "    vec3  direction;"
+        "    vec3  ambient;"
+        "    vec3  diffuse;"
+        "    vec3  specular;"
+        "    float constant;"
+        "    float linear;"
+        "    float quadratic;"
+        "    float cutOff;"
+        "    float outerCutOff;"
         "};"
         "\n"
-        "in  vec4 aPosition;"
-        "in  vec3 aNormal;"
-        "out vec4 oColor;"
-        "\n"
-        "uniform mat4 uModelMatrix;"
-        "uniform mat4 uViewMatrix;"
-        "uniform mat4 uProjectionMatrix;"
-        "\n"
-        "uniform vec4 uLightPosition;"
-        "uniform Light light;"
-        "\n"
-        "uniform Material material;"
-        "\n"
-        "void main(void)"
-        "{"
-        "    mat4 eyeMatrix       = uViewMatrix * uModelMatrix;"
-        "    vec4 ePosition       = eyeMatrix * aPosition;"
-        "    mat3 normalMatrix    = mat3(transpose(inverse(eyeMatrix)));"
-        "    vec3 eNormal         = normalize(normalMatrix * aNormal);"
-        "    vec3 eLightDirection = normalize(-light.direction);"
-        "\n"
-        "    vec3 eReflectionDirection = reflect(eLightDirection, eNormal);"
-        "    vec3 eCameraDirection     = normalize(-ePosition.xyz);"
-        "\n"
-        "    vec4 ambient  = vec4(light.ambient, 1.0f) * material.ambient;"
-        "    vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(eLightDirection, eNormal), 0.0f);"
-        "    vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
-        "    oColor = ambient + diffuse + specular;"
-        "\n"
-        "    gl_Position = uProjectionMatrix * ePosition;"
-        "}";
-
-    const GLchar* fragmentShaderSource =
-        "#version 460 core"
-        "\n"
-        "in  vec4 oColor;"
+        "in  vec3 oNormal;"
+        "in  vec3 wPosition;"
         "out vec4 FragColor;"
         "\n"
+        "uniform Light    light;"
+        "uniform Material material;"
+        "uniform vec3     uCameraPosition;"
+        "\n"
         "void main(void)"
         "{"
-        "    FragColor = oColor;"
+        "    vec3  lightDirection = normalize(light.position - wPosition);"
+        "    float theta = dot(lightDirection, normalize(-light.direction));"
+        // "    if (theta > light.cutOff)"
+        "    {"
+        "        float epsilon   = light.cutOff - light.outerCutOff;"
+        "        float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);"
+        "        vec3 eLightDirection = normalize(-light.direction);"
+        "        float distance       = length(light.position - wPosition);"
+        "        float attenuation    = 1.0 / (light.constant + light.linear * distance +"
+        "light.quadratic * (distance * distance));"
+        "\n"
+        "        vec3 eReflectionDirection = reflect(eLightDirection, oNormal);"
+        "        vec3 eCameraDirection     = normalize(uCameraPosition - wPosition);"
+        "\n"
+        "        vec4 ambient = vec4(light.ambient, 1.0f) * material.ambient;"
+        "        vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(eLightDirection, oNormal), 0.0f);"
+        "        vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
+        "        FragColor = (ambient + (diffuse + specular) * intensity) * attenuation;"
+        "    }"
         "}";
 
     shaderProgramObject = loadShaders(vertexShaderSource, fragmentShaderSource);
@@ -494,11 +522,17 @@ int initialize()
     viewMatrixUniform       = glGetUniformLocation(shaderProgramObject, "uViewMatrix");
     projectionMatrixUniform = glGetUniformLocation(shaderProgramObject, "uProjectionMatrix");
 
-    lightUniform.ambient   = glGetUniformLocation(shaderProgramObject, "light.ambient");
-    lightUniform.diffuse   = glGetUniformLocation(shaderProgramObject, "light.diffuse");
-    lightUniform.specular  = glGetUniformLocation(shaderProgramObject, "light.specular");
-    lightUniform.position  = glGetUniformLocation(shaderProgramObject, "light.position");
-    lightUniform.direction = glGetUniformLocation(shaderProgramObject, "light.direction");
+    lightUniform.ambient     = glGetUniformLocation(shaderProgramObject, "light.ambient");
+    lightUniform.diffuse     = glGetUniformLocation(shaderProgramObject, "light.diffuse");
+    lightUniform.specular    = glGetUniformLocation(shaderProgramObject, "light.specular");
+    lightUniform.position    = glGetUniformLocation(shaderProgramObject, "light.position");
+    lightUniform.direction   = glGetUniformLocation(shaderProgramObject, "light.direction");
+    lightUniform.constant    = glGetUniformLocation(shaderProgramObject, "light.constant");
+    lightUniform.linear      = glGetUniformLocation(shaderProgramObject, "light.linear");
+    lightUniform.quadratic   = glGetUniformLocation(shaderProgramObject, "light.quadratic");
+    lightUniform.cutOff      = glGetUniformLocation(shaderProgramObject, "light.cutOff");
+    lightUniform.outerCutOff = glGetUniformLocation(shaderProgramObject, "light.outerCutOff");
+    cameraPositionUniform    = glGetUniformLocation(shaderProgramObject, "uCameraPosition");
 
     materialUniform.ambient   = glGetUniformLocation(shaderProgramObject, "material.ambient");
     materialUniform.diffuse   = glGetUniformLocation(shaderProgramObject, "material.diffuse");
@@ -535,14 +569,20 @@ int initialize()
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    light.setAmbient(vec3(0.1f, 0.1f, 0.1f));
+    light.setAmbient(vec3(0.0f, 0.0f, 0.0f));
     light.setDiffuse(vec3(1.0f, 1.0f, 1.0f));
     light.setSpecular(vec3(1.0f, 1.0f, 1.0f));
-    light.setPosition(vec3(100.0f, 100.0f, 100.0f));
-    light.setDirection(vec3(-1.2f, -1.0f, 0.0f));
+    light.setPosition(vec3(0.0f, 15.0f, 0.0f));
+    light.setDirection(vec3(0.0f, -1.0f, 0.0f));
+    light.setConstantAttenuation(0.5f);
+    light.setLinearAttenuation(0.05f);
+    light.setQuadraticAttenuation(0.002f);
+    light.SetCutOff(cosf(radians(15.0f)));
+    debug = 0.35f;
+    light.SetCutOff(cosf(radians(17.0f)));
 
     material.setDiffuse(vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    material.setAmbient(vec4(0.0f, 0.0f, 0.0f, 0.0f));
+    material.setAmbient(vec4(0.1f, 0.1f, 0.1f, 0.0f));
     material.setSpecular(vec4(1.0f, 1.0f, 1.0f, 1.0f));
     material.setShininess(50.0f);
 
@@ -576,6 +616,7 @@ void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // light.SetOuterCutOff(debug);
     mat4 modelMatrix       = mat4::identity();
     mat4 translationMatrix = mat4::identity();
     mat4 scaleMatrix       = mat4::identity();
@@ -599,6 +640,13 @@ void display()
         glUniform3fv(lightUniform.specular, 1, light.getSpecular());
         glUniform3fv(lightUniform.position, 1, light.getPosition());
         glUniform3fv(lightUniform.direction, 1, light.getDirection());
+        glUniform1f(lightUniform.constant, light.getConstantAttenuation());
+        glUniform1f(lightUniform.linear, light.getLinearAttenuation());
+        glUniform1f(lightUniform.quadratic, light.getQuadraticAttenuation());
+        glUniform1f(lightUniform.cutOff, light.getCutOff());
+        glUniform1f(lightUniform.outerCutOff, cosf(radians(light.getOuterCutOff())));
+
+        glUniform3fv(cameraPositionUniform, 1, cameraPosition);
 
         glUniform4fv(materialUniform.ambient, 1, material.getAmbient());
         glUniform4fv(materialUniform.diffuse, 1, material.getDiffuse());
