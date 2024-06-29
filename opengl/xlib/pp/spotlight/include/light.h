@@ -18,11 +18,11 @@ using namespace vmath;
 
 struct Light
 {
-    vec3 position;  /**< Position light in eye coordinates */
-    vec3 direction; /**< Direction of light rays */
-    vec3 ambient;   /**< Ambient component of light */
-    vec3 diffuse;   /**< Diffuse component of light */
-    vec3 specular;  /**< Specular component of light */
+    vec3  position;
+    vec3  direction;
+    vec3  ambient;
+    vec3  diffuse;
+    vec3  specular;
     float constant;
     float linear;
     float quadratic;

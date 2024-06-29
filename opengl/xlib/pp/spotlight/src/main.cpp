@@ -434,12 +434,11 @@ int initialize()
         "\n"
         "void main(void)"
         "{"
-        "    mat4 eyeMatrix       = uViewMatrix * uModelMatrix;"
-        "    mat3 normalMatrix    = mat3(transpose(inverse(eyeMatrix)));"
+        "    mat3 normalMatrix = mat3(transpose(inverse(uModelMatrix)));"
         "\n"
         "    oNormal     = normalize(normalMatrix * aNormal);"
         "    wPosition   = vec3(uModelMatrix * aPosition);"
-        "    gl_Position = uProjectionMatrix * eyeMatrix * aPosition;"
+        "    gl_Position = uProjectionMatrix * uViewMatrix * vec4(wPosition, 1.0f);"
         "}";
 
     const GLchar* fragmentShaderSource =
@@ -477,25 +476,22 @@ int initialize()
         "\n"
         "void main(void)"
         "{"
-        "    vec3  lightDirection = normalize(light.position - wPosition);"
-        "    float theta = dot(lightDirection, normalize(-light.direction));"
-        // "    if (theta > light.cutOff)"
-        "    {"
-        "        float epsilon   = light.cutOff - light.outerCutOff;"
-        "        float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);"
-        "        vec3 eLightDirection = normalize(-light.direction);"
-        "        float distance       = length(light.position - wPosition);"
-        "        float attenuation    = 1.0 / (light.constant + light.linear * distance +"
-        "light.quadratic * (distance * distance));"
+        "    vec3  rayDirection   = normalize(light.position - wPosition);"
+        "    vec3  lightDirection = normalize(-light.direction);"
+        "    float costheta       = dot(rayDirection, lightDirection);"
+        "    float delta          = light.cutOff - light.outerCutOff;"
+        "    float intensity      = clamp((costheta - light.outerCutOff) / delta, 0.0, 1.0);"
+        "    float distance       = length(light.position - wPosition);"
+        "    float attenuation    = 1.0 / (light.constant + (light.linear +"
+        "light.quadratic * distance ) * distance);"
         "\n"
-        "        vec3 eReflectionDirection = reflect(eLightDirection, oNormal);"
-        "        vec3 eCameraDirection     = normalize(uCameraPosition - wPosition);"
+        "    vec3 eReflectionDirection = reflect(lightDirection, oNormal);"
+        "    vec3 eCameraDirection     = normalize(uCameraPosition - wPosition);"
         "\n"
-        "        vec4 ambient = vec4(light.ambient, 1.0f) * material.ambient;"
-        "        vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(eLightDirection, oNormal), 0.0f);"
-        "        vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
-        "        FragColor = (ambient + (diffuse + specular) * intensity) * attenuation;"
-        "    }"
+        "    vec4 ambient  = vec4(light.ambient, 1.0f) * material.ambient;"
+        "    vec4 diffuse  = vec4(light.diffuse, 1.0f) * material.diffuse * max(dot(lightDirection, oNormal), 0.0f);"
+        "    vec4 specular = vec4(light.specular, 1.0f) * material.specular * pow(max(dot(eReflectionDirection, eCameraDirection), 0.0f), material.shininess);"
+        "    FragColor = (ambient + (diffuse + specular) *  intensity) * attenuation + 0.01f;"
         "}";
 
     shaderProgramObject = loadShaders(vertexShaderSource, fragmentShaderSource);
@@ -569,22 +565,21 @@ int initialize()
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    light.setAmbient(vec3(0.0f, 0.0f, 0.0f));
-    light.setDiffuse(vec3(1.0f, 1.0f, 1.0f));
+    light.setAmbient(vec3(0.2f, 0.2f, 0.2f));
+    light.setDiffuse(vec3(0.8f, 0.8f, 0.8f));
     light.setSpecular(vec3(1.0f, 1.0f, 1.0f));
     light.setPosition(vec3(0.0f, 15.0f, 0.0f));
     light.setDirection(vec3(0.0f, -1.0f, 0.0f));
     light.setConstantAttenuation(0.5f);
     light.setLinearAttenuation(0.05f);
-    light.setQuadraticAttenuation(0.002f);
-    light.SetCutOff(cosf(radians(15.0f)));
-    debug = 0.35f;
-    light.SetCutOff(cosf(radians(17.0f)));
+    light.setQuadraticAttenuation(0.02f);
+    light.SetCutOff(cosf(radians(5.0f)));
+    light.SetOuterCutOff(cosf(radians(9.0f)));
 
     material.setDiffuse(vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    material.setAmbient(vec4(0.1f, 0.1f, 0.1f, 0.0f));
+    material.setAmbient(vec4(0.2f, 0.2f, 0.2f, 1.0f));
     material.setSpecular(vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    material.setShininess(50.0f);
+    material.setShininess(38.0f);
 
     /* Enabling Depth */
     glClearDepth(1.0f);      //[Compulsory] Make all bits in depth buffer as '1'
@@ -616,7 +611,6 @@ void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // light.SetOuterCutOff(debug);
     mat4 modelMatrix       = mat4::identity();
     mat4 translationMatrix = mat4::identity();
     mat4 scaleMatrix       = mat4::identity();
@@ -628,8 +622,6 @@ void display()
     glBindVertexArray(modelUniform.vao);
     {
         viewMatrix = lookat(cameraPosition, cameaDirection, vec3(0.0f, 1.0f, 0.0f));
-
-        modelMatrix = translate(0.0f, 0.0f, 0.0f) * rotate(rotationAngle, 0.0f, 1.0f, 0.0f);
 
         glUniformMatrix4fv(modelMatrixUniform, 1, GL_FALSE, modelMatrix);
         glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, viewMatrix);
@@ -644,7 +636,7 @@ void display()
         glUniform1f(lightUniform.linear, light.getLinearAttenuation());
         glUniform1f(lightUniform.quadratic, light.getQuadraticAttenuation());
         glUniform1f(lightUniform.cutOff, light.getCutOff());
-        glUniform1f(lightUniform.outerCutOff, cosf(radians(light.getOuterCutOff())));
+        glUniform1f(lightUniform.outerCutOff, light.getOuterCutOff());
 
         glUniform3fv(cameraPositionUniform, 1, cameraPosition);
 
@@ -655,17 +647,18 @@ void display()
 
         glDrawElements(GL_TRIANGLES, model.header.nIndices, GL_UNSIGNED_INT, 0);
     }
-    glBindVertexArray(0);
     glBindVertexArray(0U);
 }
 
 void update()
 {
-    rotationAngle += 1;
+    rotationAngle += 0.01;
     if (360.0f < rotationAngle)
     {
         rotationAngle -= 360.0f;
     }
+
+    light.setDirection(vec3(debug*cosf(rotationAngle), -1.0f, debug*sinf(rotationAngle)));
 }
 
 void toggleFullscreen(void)
