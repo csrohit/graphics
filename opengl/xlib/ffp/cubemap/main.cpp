@@ -9,8 +9,11 @@
 #include <cstdlib>
 #include <iostream>
 #define _USE_MATH_DEFINES
-#include "stb_image.h"
 #include <math.h>
+#include "stb_image.h"
+
+static void quadloop(GLfloat r, GLfloat R, GLint nsides, GLfloat sideDelta, GLfloat cosTheta, GLfloat sinTheta, GLfloat cosTheta1, GLfloat sinTheta1);
+static void doughnut(GLfloat r, GLfloat R, GLint nsides, GLint rings);
 
 /* function declaration */
 static void initialize();
@@ -20,12 +23,6 @@ static void update();
 static void resize(GLsizei width, GLsizei height);
 static void toggleFullscreen(Display *display, Window window);
 void        DrawGround(void);
-void        drawCube();
-void        DrawCube();
-void        DrawSurface();
-void        loadTexture(const char *pFilename, uint32_t *pTextureID);
-
-void setShadowMatrix(GLfloat *result, float *lightPost, float *plane);
 
 /* Windowing related variables */
 Display   *dpy          = nullptr; // connection to server
@@ -38,16 +35,17 @@ bool       gbFullscreen = false;   // should display in fullscreen mode
 bool       shouldDraw   = false;   // should scene be rendered
 
 /*--- Program specific variables ---*/
-GLUquadric *pQuadric;
 GLfloat     colorWhite[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 GLfloat     colorBlack[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-GLfloat     yPos          = 0.1f;
+GLfloat     zPos          = 0.1f;
+GLfloat     xPos          = 0.1f;
+GLUquadric *pQuadric;
 
 /* Light properties */
-GLfloat lightPosition[4]       = {5.0f, 5.0f, 1.0f, 1.0f};
+GLfloat lightPosition[4]       = {3.0f, 0.0f, 2.0f, 1.0f};
 GLfloat lightPositionMirror[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 GLfloat lightAmbient[4]        = {0.25, 0.25, 0.25, 1.0f};
-GLfloat lightDiffuse[4]        = {0.0f, 1.0f, 1.0f, 1.0f};
+GLfloat lightDiffuse[4]        = {1.0f, 1.0f, 1.0f, 1.0f};
 GLfloat lightSpecular[4]       = {1.0f, 1.0f, 1.0f, 1.0f};
 
 GLfloat materialBlue[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
@@ -55,15 +53,8 @@ GLfloat materialGreen[4]  = {0.0f, 1.0f, 0.0f, 1.0f};
 GLfloat materialYellow[4] = {1.0f, 1.0f, 0.0f, 1.0f};
 GLfloat materialCyan[4]   = {0.0f, 1.0f, 1.0f, 1.0f};
 
-GLfloat fFogColor[4] = {0.847656f, 0.84375f, 0.83984f, 1.0f};
-
-float g_rotationAngle = 0.0;
-
-GLfloat g_lightPos[4] = {5.0, 5.0, 5.0, 1.0};
-GLfloat g_shadowMatrix[16];
-
 /* Material Diffuse */
-GLfloat materialDiffuse[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+GLfloat materialDiffuse[4] = {1.0f, 0.0f, 0.0f, 1.0f};
 /*-----*/
 int main(int argc, char *argv[])
 {
@@ -110,7 +101,7 @@ int main(int argc, char *argv[])
     xattr.colormap          = XCreateColormap(dpy, root, visual->visual, AllocNone);
     xattr.event_mask        = ExposureMask | KeyPressMask | StructureNotifyMask;
 
-    w = XCreateWindow(dpy, root, 0, 0, 1600, 1200, 0, visual->depth, InputOutput, visual->visual, CWColormap | CWEventMask, &xattr);
+    w = XCreateWindow(dpy, root, 0, 0, 800, 600, 0, visual->depth, InputOutput, visual->visual, CWColormap | CWEventMask, &xattr);
     /* register for window close event */
     wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, w, &wm_delete_window, 1);
@@ -157,11 +148,11 @@ int main(int argc, char *argv[])
                             if (event.xkey.state & ShiftMask)
                             {
                                 /* handle A */
-                                yPos += 0.1;
+                                zPos += 0.1;
                             }
                             else
                             {
-                                yPos -= 0.1;
+                                zPos -= 0.1;
                             }
                             break;
                         }
@@ -228,7 +219,76 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-GLuint cube;
+GLuint torus;
+
+void makeImages(void)
+{
+    const char *names[] = {"res/right.jpg", "res/left.jpg", "res/top.jpg", "res/bottom.jpg", "res/front.jpg", "res/back.jpg"};
+    int         width, height, nrChannels;
+
+    for (uint32_t idx = 0U; idx < 6U; ++idx)
+    {
+        unsigned char *data = stbi_load(names[idx], &width, &height, &nrChannels, 0);
+        if (data)
+        {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X_EXT + idx, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        }
+        else
+        {
+            std::cout << "Failed to load texture" << std::endl;
+        }
+        stbi_image_free(data);
+    }
+}
+void drawCube()
+{
+    glBegin(GL_QUADS);
+
+    /* Front face */
+    glNormal3f(0.0f, 0.0f, 1.0f);
+    glVertex3f(1.0f, 1.0f, 1.0f);   // top-right
+    glVertex3f(-1.0f, 1.0f, 1.0f);  // top-left
+    glVertex3f(-1.0f, -1.0f, 1.0f); // bottom-left
+    glVertex3f(1.0f, -1.0f, 1.0f);  // bottom right
+
+    /* Right face */
+    glNormal3f(1.0f, 0.0f, 0.0f);
+    glVertex3f(1.0f, 1.0f, -1.0f);  // top-right
+    glVertex3f(1.0f, 1.0f, 1.0f);   // top-left
+    glVertex3f(1.0f, -1.0f, 1.0f);  // bottom-left
+    glVertex3f(1.0f, -1.0f, -1.0f); // bottom-right
+
+    /* Back face */
+    glNormal3f(0.0f, 0.0f, -1.0f);
+    glVertex3f(-1.0f, 1.0f, -1.0f);  // top-right
+    glVertex3f(1.0f, 1.0f, -1.0f);   // top-left
+    glVertex3f(1.0f, -1.0f, -1.0f);  // bottom left
+    glVertex3f(-1.0f, -1.0f, -1.0f); // bottom-right
+
+    /* Left face */
+    glNormal3f(-1.0f, 0.0f, 0.0f);
+    glVertex3f(-1.0f, 1.0f, 1.0f);   // top-right
+    glVertex3f(-1.0f, 1.0f, -1.0f);  // top-left
+    glVertex3f(-1.0f, -1.0f, -1.0f); // bottom-left
+    glVertex3f(-1.0f, -1.0f, 1.0f);  // bottom-right
+
+    /* Top face */
+    glNormal3f(0.0f, 1.0f, 0.0f);
+    glVertex3f(-1.0f, 1.0f, 1.0f);  // top-right
+    glVertex3f(1.0f, 1.0f, 1.0f);   // top-left
+    glVertex3f(1.0f, 1.0f, -1.0f);  // bottom-left
+    glVertex3f(-1.0f, 1.0f, -1.0f); // bottom-right
+
+    /* Bottom face */
+    glNormal3f(0.0f, -1.0f, 0.0f);
+    glVertex3f(1.0f, -1.0f, 1.0f);   // top-right
+    glVertex3f(-1.0f, -1.0f, 1.0f);  // top-left
+    glVertex3f(-1.0f, -1.0f, -1.0f); // bottom-left
+    glVertex3f(1.0f, -1.0f, -1.0f);  // bottom-right
+
+    glEnd();
+}
+
 
 static void initialize()
 {
@@ -240,110 +300,84 @@ static void initialize()
     glClearDepth(1.0f);      // this bit will be set in depth buffer after calling glClear()
     glEnable(GL_DEPTH_TEST); // enable depth test
     glDepthFunc(GL_LEQUAL);  // Which function to use for testing
-
     glEnable(GL_CULL_FACE);
+    // glFrontFace(GL_CW);
+    // glEnable(GL_CULL_FACE);
 
     /* per light initialization */
     glEnable(GL_LIGHT0);
-    // glEnable(GL_LIGHTING);
     glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
     glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);
     glLightfv(GL_LIGHT0, GL_SPECULAR, lightSpecular);
 
-    cube = glGenLists(2);
-    glNewList(cube, GL_COMPILE);
-    glTranslatef(0.0f, 1.0f, 0.0f);
-    glMaterialfv(GL_FRONT, GL_EMISSION, colorBlack);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, materialDiffuse);
-    drawCube();
-    glEndList();
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP_EXT, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP_EXT, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP_EXT, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP_EXT, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP_EXT, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    makeImages();
+    // glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_NORMAL_MAP_EXT);
+    // glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_NORMAL_MAP_EXT);
+    // glTexGeni(GL_R, GL_TEXTURE_GEN_MODE, GL_NORMAL_MAP_EXT);
+    glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_REFLECTION_MAP_EXT);
+    glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_REFLECTION_MAP_EXT);
+    glTexGeni(GL_R, GL_TEXTURE_GEN_MODE, GL_REFLECTION_MAP_EXT);
+    glEnable(GL_TEXTURE_GEN_S);
+    glEnable(GL_TEXTURE_GEN_T);
+    glEnable(GL_TEXTURE_GEN_R);
 
-    /* ground */
-    glNewList(cube + 1, GL_COMPILE);
-    glPushAttrib(GL_LIGHTING_BIT);
-    glDisable(GL_LIGHTING);
-    DrawGround();
-    glPopAttrib();
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    glEnable(GL_TEXTURE_CUBE_MAP_EXT);
+    // glEnable(GL_LIGHTING);
+    // glEnable(GL_LIGHT0);
+    // glMaterialfv(GL_FRONT, GL_DIFFUSE, colorWhite);
+    
+    pQuadric = gluNewQuadric();
+
+    torus = glGenLists(1);
+    glNewList(torus, GL_COMPILE);
+    glTranslatef(-4.0f, 0.0f, 0.0f);
+    gluSphere(pQuadric, 1.0f, 100, 100);
+    glTranslatef(4.0f, 0.0f, 0.0f);
+    
+    drawCube();
+
+    glTranslatef(4.0f, 0.0f, 0.0f);
+    doughnut(0.3f, 0.8f, 50, 50);
     glEndList();
 
     // Set the clipping plane equation
     resize(xattr.width, xattr.height);
-    // toggleFullscreen(dpy, w);
+    toggleFullscreen(dpy, w);
 }
 
 void uninitialize()
 {
-    glDeleteLists(cube, 2);
+    glDeleteLists(torus, 1);
+    gluDeleteQuadric(pQuadric);
 }
 
 float angle = 0.0f;
+
+void   drawScene();
 
 static void display()
 {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    gluLookAt(0.0, yPos, 10.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-    // glRotatef(angle, 0.0f, 1.0f, 0.0f);
+    gluLookAt(xPos, 2.0f, zPos, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
-    /* generate stencil */
-    glDisable(GL_DEPTH_TEST);
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    glEnable(GL_STENCIL_TEST);
-    glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
-    glStencilFunc(GL_ALWAYS, 1, 0xffffffff);
-    glCallList(cube + 1);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    // Load and enable the appropriate texture for each face of the cube
+    // Assuming you have loaded and bound textures for each face (front, back, left, right, top, bottom)
 
-    /* render reflection where stensil is 1 */
-    glStencilFunc(GL_EQUAL, 1, 0xffffffff);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-
-    /* draw reflected cube */
-    glPushMatrix();
-    glFrontFace(GL_CW);
-    glScalef(1.0f, -1.0f, 1.0f);
-    glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
-    glCallList(cube);
-    glFrontFace(GL_CCW);
-    glPopMatrix();
-
-    glPushMatrix();
-    glPushAttrib(GL_LIGHTING_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_LIGHTING);
-    glEnable(GL_BLEND);
-
-    // glColor4f(0.0f, 0.0f, 0.0f, 1.0f);
-    glMultMatrixf(g_shadowMatrix);
-    glCallList(cube);
-
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-    glPopAttrib();
-    glPopMatrix();
-    glDisable(GL_STENCIL_TEST);
-
-    /* draw actual object */
-    glPushMatrix();
-    glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
-    glCallList(cube);
-    glPopMatrix();
-
-    /* draw actual surface */
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glCallList(cube + 1);
-    glDisable(GL_BLEND);
+    glCallList(torus);
 }
 
-void drawScene()
-{
-}
 
-float       plane[4] = {0.0, 1.0, 0.0, 0.0};
 static void update()
 {
     angle += 0.01;
@@ -351,9 +385,10 @@ static void update()
     {
         angle -= 360.0f;
     }
-    lightPosition[0] = 5 * cosf(angle);
-    lightPosition[2] = 5 * sinf(angle);
-    setShadowMatrix(g_shadowMatrix, lightPosition, plane);
+    xPos = 8.0f * cosf(angle);
+    zPos = 8.0f * sinf(angle);
+    // xPos = 8.0f;
+    // zPos = 38.0f;
 }
 
 static void resize(GLsizei width, GLsizei height)
@@ -461,7 +496,7 @@ void DrawGround(void)
     GLfloat y       = 0.0f;
     GLint   iBounce = 0;
     GLfloat iStrip, iRun, fColor;
-    glNormal3f(0.0, 1.0, 0.0);
+
     glShadeModel(GL_FLAT);
     for (iStrip = -fExtent; iStrip <= fExtent; iStrip += fStep)
     {
@@ -482,84 +517,4 @@ void DrawGround(void)
         glEnd();
     }
     glShadeModel(GL_SMOOTH);
-}
-
-void drawCube()
-{
-    glBegin(GL_QUADS);
-
-    /* Front face */
-    glNormal3f(0.0f, 0.0f, 1.0f);
-    glVertex3f(1.0f, 1.0f, 1.0f);   // top-right
-    glVertex3f(-1.0f, 1.0f, 1.0f);  // top-left
-    glVertex3f(-1.0f, -1.0f, 1.0f); // bottom-left
-    glVertex3f(1.0f, -1.0f, 1.0f);  // bottom right
-
-    /* Right face */
-    glNormal3f(1.0f, 0.0f, 0.0f);
-    glVertex3f(1.0f, 1.0f, -1.0f);  // top-right
-    glVertex3f(1.0f, 1.0f, 1.0f);   // top-left
-    glVertex3f(1.0f, -1.0f, 1.0f);  // bottom-left
-    glVertex3f(1.0f, -1.0f, -1.0f); // bottom-right
-
-    /* Back face */
-    glNormal3f(0.0f, 0.0f, -1.0f);
-    glVertex3f(-1.0f, 1.0f, -1.0f);  // top-right
-    glVertex3f(1.0f, 1.0f, -1.0f);   // top-left
-    glVertex3f(1.0f, -1.0f, -1.0f);  // bottom left
-    glVertex3f(-1.0f, -1.0f, -1.0f); // bottom-right
-
-    /* Left face */
-    glNormal3f(-1.0f, 0.0f, 0.0f);
-    glVertex3f(-1.0f, 1.0f, 1.0f);   // top-right
-    glVertex3f(-1.0f, 1.0f, -1.0f);  // top-left
-    glVertex3f(-1.0f, -1.0f, -1.0f); // bottom-left
-    glVertex3f(-1.0f, -1.0f, 1.0f);  // bottom-right
-
-    /* Top face */
-    glNormal3f(0.0f, 1.0f, 0.0f);
-    glVertex3f(-1.0f, 1.0f, 1.0f);  // top-right
-    glVertex3f(1.0f, 1.0f, 1.0f);   // top-left
-    glVertex3f(1.0f, 1.0f, -1.0f);  // bottom-left
-    glVertex3f(-1.0f, 1.0f, -1.0f); // bottom-right
-
-    /* Bottom face */
-    glNormal3f(0.0f, -1.0f, 0.0f);
-    glVertex3f(1.0f, -1.0f, 1.0f);   // top-right
-    glVertex3f(-1.0f, -1.0f, 1.0f);  // top-left
-    glVertex3f(-1.0f, -1.0f, -1.0f); // bottom-left
-    glVertex3f(1.0f, -1.0f, -1.0f);  // bottom-right
-
-    glEnd();
-}
-void setShadowMatrix(GLfloat *destMat, float *lightPos, float *plane)
-{
-    GLfloat dot;
-
-    // dot product of plane and light position
-    dot = plane[0] * lightPos[0] + plane[1] * lightPos[1] + plane[1] * lightPos[2] + plane[3] * lightPos[3];
-
-    // first column
-    destMat[0]  = dot - lightPos[0] * plane[0];
-    destMat[4]  = 0.0f - lightPos[0] * plane[1];
-    destMat[8]  = 0.0f - lightPos[0] * plane[2];
-    destMat[12] = 0.0f - lightPos[0] * plane[3];
-
-    // second column
-    destMat[1]  = 0.0f - lightPos[1] * plane[0];
-    destMat[5]  = dot - lightPos[1] * plane[1];
-    destMat[9]  = 0.0f - lightPos[1] * plane[2];
-    destMat[13] = 0.0f - lightPos[1] * plane[3];
-
-    // third column
-    destMat[2]  = 0.0f - lightPos[2] * plane[0];
-    destMat[6]  = 0.0f - lightPos[2] * plane[1];
-    destMat[10] = dot - lightPos[2] * plane[2];
-    destMat[14] = 0.0f - lightPos[2] * plane[3];
-
-    // fourth column
-    destMat[3]  = 0.0f - lightPos[3] * plane[0];
-    destMat[7]  = 0.0f - lightPos[3] * plane[1];
-    destMat[11] = 0.0f - lightPos[3] * plane[2];
-    destMat[15] = dot - lightPos[3] * plane[3];
 }

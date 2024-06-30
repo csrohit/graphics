@@ -1,0 +1,5 @@
+Program started successfully
+Core profile based glxContext obtained successfully
+Hardware rendering is supported
+----- Shader Program Linked Successfully for sphere -----
+Program terminated successfully
